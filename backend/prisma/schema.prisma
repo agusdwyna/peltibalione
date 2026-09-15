@@ -1,0 +1,397 @@
+// PELTI Bali One — Phase 1 Data Model
+// Reference: PRD §40 Core Data Model
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────
+
+enum Role {
+  CENTRAL_ADMIN
+  DISTRICT_ADMIN
+  PLAYER
+}
+
+enum PlayerStatus {
+  DRAFT
+  PENDING_VERIFICATION
+  VERIFIED
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+  REJECTED
+}
+
+// PRD §24 — kelompok umur master data (configurable business rule)
+model AgeGroup {
+  id        String  @id @default(uuid())
+  code      String  @unique // e.g. KU-10, KU-12, KU-14, KU-16, KU-18, OPEN
+  name      String
+  minAge    Int // inclusive lower bound (0 for the youngest band)
+  maxAge    Int? // inclusive upper bound; null = no upper bound (OPEN)
+  sortOrder Int
+
+  players Player[]
+
+  @@map("age_groups")
+}
+
+enum FormType {
+  PLAYER_REGISTRATION
+}
+
+enum FormStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+}
+
+enum SubmissionStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  LINKED
+  CREATED
+  VERIFIED
+  REJECTED
+}
+
+enum DuplicateMatch {
+  NO_MATCH
+  POSSIBLE_MATCH
+  EXACT_MATCH
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum VerificationLevel {
+  DISTRICT
+  CENTRAL
+}
+
+// ─────────────────────────────────────────────
+// Identity & Access (PRD §4)
+// ─────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // PRD §4.4 — Account is bound to NIK
+  nik      String? @unique
+
+  personId String? @unique
+  person   Person? @relation(fields: [personId], references: [id])
+
+  userRoles     UserRole[]
+  ownedForms    RegistrationForm[] @relation("FormOwner")
+  auditLogs     AuditLog[]
+  uploadedFiles File[]
+
+  @@map("users")
+}
+
+model UserRole {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role
+  districtId String?
+  district   District? @relation(fields: [districtId], references: [id])
+  createdAt  DateTime  @default(now())
+
+  // uniqueness (userId, role, districtId) enforced at service layer —
+  // PG treats NULL as distinct so compound @@unique won't dedupe
+  @@index([userId, role])
+  @@map("user_roles")
+}
+
+model Person {
+  id         String    @id @default(uuid())
+  fullName   String
+  birthPlace String?
+  birthDate  DateTime?
+  nik        String?   @unique
+  address    String?
+  phone      String?
+  instagram  String?
+  whatsapp   String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  user   User?
+  player Player?
+
+  @@map("persons")
+}
+
+// ─────────────────────────────────────────────
+// Organization (PRD §5)
+// ─────────────────────────────────────────────
+
+model District {
+  id        String   @id @default(uuid())
+  code      String   @unique // e.g. BDG, DPS
+  name      String   @unique // e.g. Badung, Denpasar
+  createdAt DateTime @default(now())
+
+  admins               UserRole[]
+  auditLogs            AuditLog[]
+  players              Player[]
+  clubs                Club[]
+  forms                RegistrationForm[]
+  verificationRequests VerificationRequest[]
+  districtHistoryFrom  DistrictHistory[]   @relation("FromDistrict")
+  districtHistoryTo    DistrictHistory[]   @relation("ToDistrict")
+
+  @@map("districts")
+}
+
+// ─────────────────────────────────────────────
+// Player Registry (PRD §19–§29)
+// ─────────────────────────────────────────────
+
+model Player {
+  id         String       @id @default(uuid())
+  playerCode String       @unique // PL-BDG-000001
+  status     PlayerStatus @default(PENDING_VERIFICATION)
+
+  personId String @unique
+  person   Person @relation(fields: [personId], references: [id])
+
+  districtId String
+  district   District @relation(fields: [districtId], references: [id])
+
+  clubId String?
+  club   Club?   @relation(fields: [clubId], references: [id])
+
+  // derived, computed at write time from birthDate + age group rule
+  ageGroup String?
+
+  // PRD §24 — resolved age group reference (master data)
+  ageGroupId String?
+  ageGroupRef AgeGroup?  @relation(fields: [ageGroupId], references: [id])
+
+  // mandatory photo (PRD §22) — nullable only while DRAFT
+  photoId String? @unique
+  photo   File?   @relation("PlayerPhoto", fields: [photoId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pnpRankings     PlayerPnpRanking[]
+  districtHistory DistrictHistory[]
+  submissions     FormSubmission[]
+  files           File[]             @relation("PlayerFiles")
+
+  @@index([districtId, status])
+  @@map("players")
+}
+
+model Club {
+  id         String    @id @default(uuid())
+  name       String
+  districtId String?
+  district   District? @relation(fields: [districtId], references: [id])
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  players Player[]
+
+  @@map("clubs")
+}
+
+// PRD §26 — PNP ranking histori
+model PlayerPnpRanking {
+  id        String   @id @default(uuid())
+  playerId  String
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  rank      Int
+  period    String // e.g. "2026", "2026-H1"
+  updatedAt DateTime @default(now())
+  updatedBy String? // userId of whoever input it (player self / admin)
+
+  @@index([playerId, updatedAt])
+  @@map("player_pnp_rankings")
+}
+
+// PRD §29 — District transfer history
+model DistrictHistory {
+  id             String    @id @default(uuid())
+  playerId       String
+  player         Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  fromDistrictId String?
+  fromDistrict   District? @relation("FromDistrict", fields: [fromDistrictId], references: [id])
+  toDistrictId   String
+  toDistrict     District  @relation("ToDistrict", fields: [toDistrictId], references: [id])
+  reason         String?
+  changedAt      DateTime  @default(now())
+  changedBy      String? // userId
+
+  @@index([playerId, changedAt])
+  @@map("district_history")
+}
+
+// ─────────────────────────────────────────────
+// Registration (PRD §13–§17)
+// ─────────────────────────────────────────────
+
+model RegistrationForm {
+  id          String     @id @default(uuid())
+  type        FormType   @default(PLAYER_REGISTRATION)
+  title       String
+  description String?
+  status      FormStatus @default(DRAFT)
+  publicToken String     @unique
+
+  ownerUserId String
+  owner       User   @relation("FormOwner", fields: [ownerUserId], references: [id])
+
+  districtId String
+  district   District @relation(fields: [districtId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  submissions FormSubmission[]
+
+  // PRD §13 — satu form aktif per district per type (enforced in service)
+  @@index([districtId, type, status])
+  @@map("registration_forms")
+}
+
+model FormSubmission {
+  id     String           @id @default(uuid())
+  formId String
+  form   RegistrationForm @relation(fields: [formId], references: [id])
+  status SubmissionStatus @default(SUBMITTED)
+
+  // Submitted payload (validated by Zod)
+  fullName   String
+  birthPlace String?
+  birthDate  DateTime?
+  nik        String?
+  address    String?
+  phone      String?
+  clubName   String? // free-text; linked to Club on review
+  pnpRank    Int?
+  pnpPeriod  String?
+
+  // Kontak & kategorisasi (real form data)
+  instagram String?
+  whatsapp  String?
+  ageGroup  String?
+
+  // Duplicate detection result (PRD §18)
+  duplicateMatch      DuplicateMatch @default(NO_MATCH)
+  duplicateOfPlayerId String?
+
+  // Review outcome
+  playerId        String?
+  player          Player?  @relation(fields: [playerId], references: [id])
+  reviewedBy      String? // userId
+  reviewedAt      DateTime?
+  rejectionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  files File[] @relation("SubmissionFiles")
+
+  @@index([formId, status])
+  @@index([nik])
+  @@map("form_submissions")
+}
+
+// ─────────────────────────────────────────────
+// Verification (PRD §32–§34)
+// ─────────────────────────────────────────────
+
+model VerificationRequest {
+  id         String             @id @default(uuid())
+  entityType String // e.g. "PLAYER", "PLAYER_CHANGE", "DISTRICT_TRANSFER"
+  entityId   String
+  level      VerificationLevel
+  status     VerificationStatus @default(PENDING)
+
+  // requested change payload (change requests / transfers)
+  payload Json?
+
+  districtId String?
+  district   District? @relation(fields: [districtId], references: [id])
+
+  requestedBy String? // userId
+  reviewedBy  String? // userId
+  reviewedAt  DateTime?
+  reviewNotes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([entityType, entityId])
+  @@index([level, status])
+  @@map("verification_requests")
+}
+
+// ─────────────────────────────────────────────
+// Audit & Files (PRD §37, §46)
+// ─────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String
+  actor      User     @relation(fields: [actorId], references: [id])
+  districtId String?
+  district   District? @relation(fields: [districtId], references: [id], onDelete: SetNull)
+  action     String // e.g. CREATE_PLAYER, APPROVE, TRANSFER_DISTRICT
+  entityType String
+  entityId   String
+  oldValue   Json?
+  newValue   Json?
+  timestamp  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId, timestamp])
+  @@index([districtId, timestamp])
+  @@map("audit_logs")
+}
+
+model File {
+  id           String  @id @default(uuid())
+  entityType   String // e.g. "PLAYER", "SUBMISSION"
+  entityId     String?
+  storageKey   String  @unique
+  originalName String
+  mimeType     String
+  size         Int
+  uploadedBy   String?
+  uploader     User?   @relation(fields: [uploadedBy], references: [id])
+  createdAt    DateTime @default(now())
+
+  playerPhoto Player? @relation("PlayerPhoto")
+
+  player   Player? @relation("PlayerFiles", fields: [playerId], references: [id])
+  playerId String?
+
+  submission   FormSubmission? @relation("SubmissionFiles", fields: [submissionId], references: [id])
+  submissionId String?
+
+  @@index([entityType, entityId])
+  @@map("files")
+}
