@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/src/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ffffff" />
+    <title>PELTI Bali One</title>
+    <script>
+      if (localStorage.theme === 'dark' || !('theme' in localStorage)) {
+        document.documentElement.classList.add('dark');
+        document.documentElement.style.colorScheme = 'dark';
+      } else {
+        document.documentElement.classList.remove('dark');
+        document.documentElement.style.colorScheme = 'light';
+      }
+      if (localStorage.getItem('sidebar-expanded') === 'true') {
+        document.body?.classList.add('sidebar-expanded');
+      }
+    </script>
+  </head>
+  <body class="font-inter antialiased bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400">
+    <noscript>PELTI Bali One membutuhkan JavaScript untuk berjalan.</noscript>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

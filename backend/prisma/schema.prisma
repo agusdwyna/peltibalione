@@ -196,6 +196,8 @@ model Player {
   updatedAt DateTime @updatedAt
 
   pnpRankings     PlayerPnpRanking[]
+  trackRecords    PlayerTrackRecord[]
+  certificates    PlayerCertificate[]
   districtHistory DistrictHistory[]
   submissions     FormSubmission[]
   files           File[]             @relation("PlayerFiles")
@@ -229,6 +231,47 @@ model PlayerPnpRanking {
 
   @@index([playerId, updatedAt])
   @@map("player_pnp_rankings")
+}
+
+model PlayerTrackRecord {
+  id          String   @id @default(uuid())
+  playerId    String
+  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  title       String
+  eventName   String?
+  eventDate   DateTime?
+  category    String?
+  result      String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String?
+  certificates PlayerCertificate[]
+
+  @@index([playerId, eventDate])
+  @@map("player_track_records")
+}
+
+model PlayerCertificate {
+  id           String   @id @default(uuid())
+  playerId     String
+  player       Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  trackRecordId String?
+  trackRecord  PlayerTrackRecord? @relation(fields: [trackRecordId], references: [id], onDelete: SetNull)
+  title        String
+  issuer       String?
+  issuedAt     DateTime?
+  certificateNo String?
+  notes        String?
+  fileId       String?  @unique
+  file         File?    @relation("CertificateFile", fields: [fileId], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  createdBy    String?
+
+  @@index([playerId, issuedAt])
+  @@index([fileId])
+  @@map("player_certificates")
 }
 
 // PRD §29 — District transfer history
@@ -385,6 +428,7 @@ model File {
   createdAt    DateTime @default(now())
 
   playerPhoto Player? @relation("PlayerPhoto")
+  certificate PlayerCertificate? @relation("CertificateFile")
 
   player   Player? @relation("PlayerFiles", fields: [playerId], references: [id])
   playerId String?

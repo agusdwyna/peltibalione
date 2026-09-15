@@ -1,0 +1,154 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=fallback');
+
+@import 'tailwindcss';
+@import './additional-styles/utility-patterns.css' layer(components);
+
+@plugin "@tailwindcss/forms" {
+  strategy: base;
+}
+
+@custom-variant dark (&:is(.dark *));
+@custom-variant sidebar-expanded (&:is(.sidebar-expanded *));
+
+@theme {
+  --shadow-sm: 0 1px 1px 0 rgb(0 0 0 / 0.05), 0 1px 2px 0 rgb(0 0 0 / 0.02);
+
+  /* PELTI neutral ramp — preserves the template's utility names. */
+  --color-gray-50: #fcfcfb;
+  --color-gray-100: #f7f7f5;
+  --color-gray-200: #e4e3de;
+  --color-gray-300: #d4d3cc;
+  --color-gray-400: #85857f;
+  --color-gray-500: #6f6f69;
+  --color-gray-600: #5f5f5a;
+  --color-gray-700: #3d3d39;
+  --color-gray-800: #1f1f1f;
+  --color-gray-900: #151515;
+  --color-gray-950: #111111;
+
+  /* PELTI gold ramp — preserves the template's violet utility names. */
+  --color-violet-50: #fdf8e8;
+  --color-violet-100: #f8edc8;
+  --color-violet-200: #f1df9d;
+  --color-violet-300: #e9d078;
+  --color-violet-400: #e4c15a;
+  --color-violet-500: #d4a72c;
+  --color-violet-600: #c8951f;
+  --color-violet-700: #a77c13;
+  --color-violet-800: #81600f;
+  --color-violet-900: #5c430b;
+  --color-violet-950: #3f2e07;
+
+  /* Supporting semantic ramps from the PELTI design system. */
+  --color-sky-50: #edf4f7;
+  --color-sky-100: #d9e8ed;
+  --color-sky-200: #b8d2dc;
+  --color-sky-300: #8db6c4;
+  --color-sky-400: #6f9aaa;
+  --color-sky-500: #3f637a;
+  --color-sky-600: #35566a;
+  --color-sky-700: #2c4859;
+  --color-sky-800: #243a48;
+  --color-sky-900: #1b2d38;
+  --color-sky-950: #132128;
+
+  --color-green-50: #edf6f0;
+  --color-green-100: #d8ebdf;
+  --color-green-200: #b7d8c3;
+  --color-green-300: #8fbea0;
+  --color-green-400: #619a78;
+  --color-green-500: #2f6b4f;
+  --color-green-600: #285c44;
+  --color-green-700: #214d39;
+  --color-green-800: #1b3f2f;
+  --color-green-900: #153126;
+  --color-green-950: #0f241b;
+
+  --color-red-50: #fbefee;
+  --color-red-100: #f5dbd9;
+  --color-red-200: #eab9b5;
+  --color-red-300: #dc918b;
+  --color-red-400: #c96a63;
+  --color-red-500: #a33a35;
+  --color-red-600: #8f332f;
+  --color-red-700: #772b28;
+  --color-red-800: #612421;
+  --color-red-900: #4d1d1a;
+  --color-red-950: #361411;
+
+  --color-yellow-50: #fbf5e8;
+  --color-yellow-100: #f5e8c7;
+  --color-yellow-200: #ecd59a;
+  --color-yellow-300: #dfbf68;
+  --color-yellow-400: #c99e39;
+  --color-yellow-500: #a87517;
+  --color-yellow-600: #906414;
+  --color-yellow-700: #765211;
+  --color-yellow-800: #60430e;
+  --color-yellow-900: #4b350b;
+  --color-yellow-950: #352507;
+
+  --font-inter: "Inter", "sans-serif";
+
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.5;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.5715;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5;
+  --text-base--letter-spacing: -0.01em;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.5;
+  --text-lg--letter-spacing: -0.01em;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.5;
+  --text-xl--letter-spacing: -0.01em;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 1.33;
+  --text-2xl--letter-spacing: -0.01em;
+  --text-3xl: 1.88rem;
+  --text-3xl--line-height: 1.33;
+  --text-3xl--letter-spacing: -0.01em;
+  --text-4xl: 2.25rem;
+  --text-4xl--line-height: 1.25;
+  --text-4xl--letter-spacing: -0.02em;
+  --text-5xl: 3rem;
+  --text-5xl--line-height: 1.25;
+  --text-5xl--letter-spacing: -0.02em;
+  --text-6xl: 3.75rem;
+  --text-6xl--line-height: 1.2;
+  --text-6xl--letter-spacing: -0.02em;
+
+  --breakpoint-xs: 480px;
+}
+
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+
+  html {
+    background: #ffffff;
+  }
+
+  .pelti-map-source { width: 100%; overflow: visible; background: transparent; }
+  .pelti-map-source svg { display: block; width: 100%; height: auto; background: transparent; }
+  .pelti-map-source a { cursor: pointer; outline: none !important; text-decoration: none; }
+  .pelti-map-source a:focus { outline: none !important; }
+  .pelti-map-source a:focus-visible { outline: 2px solid #d4a72c !important; outline-offset: 2px; }
+  .pelti-map-source a.pelti-map-region { cursor: pointer; }
+  .pelti-map-source a.pelti-map-region path { fill: rgba(255, 255, 255, 0.84); stroke: rgb(156 163 175); stroke-width: 1.1; vector-effect: non-scaling-stroke; transition: fill 150ms ease, stroke 150ms ease; }
+  .pelti-map-source a.pelti-map-region:hover path, .pelti-map-source a.pelti-map-region:focus path, .pelti-map-source a.pelti-map-hover path { fill: #d4a72c !important; fill-opacity: 0.65; stroke: #a77c13; stroke-width: 2.2; outline: none; }
+  .pelti-map-source a.pelti-map-disabled { cursor: not-allowed; opacity: 0.35; }
+  body {
+    margin: 0;
+    min-width: 320px;
+    background: #ffffff;
+    color: var(--color-gray-600);
+    font-family: var(--font-inter);
+  }
+}
