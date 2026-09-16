@@ -3,6 +3,7 @@ import { authenticate } from '../../shared/middleware/authenticate'
 import { authorize, getDistrictScope } from '../../shared/middleware/authorize'
 import { prisma } from '../../shared/database/prisma'
 import { createForm, setFormStatus } from './forms.controller'
+import { ensureDistrictForm } from './forms.service'
 
 export const formsRouter = Router()
 
@@ -56,9 +57,17 @@ formsRouter.get('/district/:id/public', async (req, res, next) => {
 formsRouter.use(authenticate)
 
 // GET /api/forms — list forms (district-scoped) with per-status submission stats
-formsRouter.get('/', async (req, res, next) => {
+formsRouter.get('/', authorize({ roles: ['CENTRAL_ADMIN', 'DISTRICT_ADMIN'] }), async (req, res, next) => {
   try {
-    const districtId = getDistrictScope(req)
+    const scopedDistrictId = getDistrictScope(req)
+    // District Admin is always restricted to token scope. Central Admin may select
+    // one workspace, or omit districtId to intentionally view all workspaces.
+    const requestedDistrictId = typeof req.query.districtId === 'string' ? req.query.districtId : undefined
+    const districtId = scopedDistrictId ?? requestedDistrictId
+    // Lazy auto-create: each district gets its own registration form.
+    if (districtId) {
+      await ensureDistrictForm(districtId, req.auth!.userId)
+    }
     const where = districtId ? { districtId } : {}
     const forms = await prisma.registrationForm.findMany({
       where,

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../../lib/api'
-import type { SubmissionDetail } from '../../types/portal'
 import { useAuthStore } from '../../stores/auth.store'
 import PortalPagination from '../../components/portal/PortalPagination'
 import PortalToolbar from '../../components/portal/PortalToolbar'
@@ -10,6 +10,7 @@ const duplicateLabel: Record<string, string> = { POSSIBLE_MATCH: 'Kemungkinan du
 const statusLabel: Record<string, string> = { SUBMITTED: 'Menunggu', UNDER_REVIEW: 'Dalam tinjauan' }
 
 export default function VerificationPage() {
+  const navigate = useNavigate()
   const token = useAuthStore((state) => state.token)
   const user = useAuthStore((state) => state.user)
   const workspace = useWorkspaceStore((state) => state.selectedWorkspace)
@@ -24,8 +25,6 @@ export default function VerificationPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [processing, setProcessing] = useState('')
-  const [detailSubmission, setDetailSubmission] = useState<SubmissionDetail | null>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
   const canReview = user?.roles.some((role) => role.role === 'DISTRICT_ADMIN' || role.role === 'CENTRAL_ADMIN') ?? false
 
   const load = () => {
@@ -51,15 +50,14 @@ export default function VerificationPage() {
     } catch { setError('Pengajuan tidak dapat diproses.') } finally { setProcessing('') }
   }
 
-  const formatDate = (d?: string | null) => {
-    if (!d) return '—'
-    try { return new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) } catch { return '—' }
-  }
-
-  const openDetail = async (id: string) => {
-    if (!token || (!workspace?.id && !isAllRegions)) return
-    setDetailLoading(true); setDetailSubmission(null); setError('')
-    try { setDetailSubmission(await api.submissions.get(token, id, isAllRegions ? undefined : workspace?.id)) } catch { setError('Detail pengajuan tidak dapat dimuat.') } finally { setDetailLoading(false) }
+  // Transfers are verification requests, not registrations — different decision endpoint.
+  const decideTransfer = async (id: string, decision: 'approve' | 'reject') => {
+    if (!token || !window.confirm(decision === 'approve' ? 'Setujui transfer ini? Afiliasi kabupaten pemain akan berpindah.' : 'Tolak permintaan transfer ini?')) return
+    setProcessing(id); setError('')
+    try {
+      await api.verification.decide(token, id, decision, decision === 'reject' ? 'Transfer ditolak setelah peninjauan admin.' : undefined)
+      load()
+    } catch { setError('Permintaan transfer tidak dapat diproses.') } finally { setProcessing('') }
   }
 
   return (
@@ -82,8 +80,8 @@ export default function VerificationPage() {
                 <tr>
                   <th className="p-2"><div className="font-semibold text-left">Pemain</div></th>
                   <th className="p-2"><div className="font-semibold text-center">NIK</div></th>
-                  <th className="p-2"><div className="font-semibold text-center">Form</div></th>
-                  <th className="p-2"><div className="font-semibold text-center">Tanggal Lahir</div></th>
+                  <th className="p-2"><div className="font-semibold text-center">Kelompok umur</div></th>
+                  <th className="p-2"><div className="font-semibold text-center">Kabupaten</div></th>
                   <th className="p-2"><div className="font-semibold text-center">Status</div></th>
                   <th className="p-2"><div className="font-semibold text-center">Aksi</div></th>
                 </tr>
@@ -91,13 +89,14 @@ export default function VerificationPage() {
               <tbody className="text-sm font-medium divide-y divide-gray-100 dark:divide-gray-700/60">
                 {submissions.map((s) => {
                   const dupe = s.duplicateMatch ? duplicateLabel[s.duplicateMatch] : undefined
+                  const isTransfer = s.kind === 'TRANSFER'
                   return <tr key={s.id}>
-                    <td className="p-2"><div className="text-left text-gray-800 dark:text-gray-100"><div>{s.fullName}</div>{s.birthPlace && <div className="text-xs font-normal text-gray-400">{s.birthPlace}</div>}</div></td>
-                    <td className="p-2"><div className="text-center text-gray-500">{s.nik ?? '—'}</div></td>
-                    <td className="p-2"><div className="text-center text-gray-500">{s.form?.title ?? '—'}</div></td>
-                    <td className="p-2"><div className="text-center text-gray-500">{formatDate(s.birthDate)}</div></td>
-                    <td className="p-2"><div className="flex justify-center gap-1"><span className="rounded-full bg-violet-500/10 px-2.5 py-1 text-xs font-medium text-violet-700">{statusLabel[s.status] ?? s.status}</span>{dupe && <span className="rounded-full bg-amber-500/15 px-2 py-1 text-[11px] font-medium text-amber-700 dark:text-amber-500">{dupe}</span>}</div></td>
-                    <td className="p-2"><div className="flex justify-center gap-2"><button className="text-sm font-medium text-gray-600 hover:text-gray-800 dark:text-gray-300" onClick={() => openDetail(s.id)}>Detail</button>{canReview ? <><button className="text-sm font-medium text-red-600 hover:text-red-700 disabled:opacity-50" disabled={processing === s.id} onClick={() => review(s.id, 'REJECT')}>Tolak</button><button className="text-sm font-medium text-violet-600 hover:text-violet-700 disabled:opacity-50" disabled={processing === s.id} onClick={() => review(s.id, 'LINK')}>{processing === s.id ? 'Memproses…' : 'Setujui'}</button></> : null}</div></td>
+                    <td className="p-2"><div className="text-left text-gray-800 dark:text-gray-100"><div>{s.fullName}</div>{isTransfer ? <div className="text-xs font-normal text-amber-600 dark:text-amber-500">{s.info}</div> : s.birthPlace && <div className="text-xs font-normal text-gray-400">{s.birthPlace}</div>}</div></td>
+                    <td className="p-2"><div className="text-center font-mono text-gray-500">{s.nik ?? '—'}</div></td>
+                    <td className="p-2"><div className="text-center text-gray-500">{s.ageGroup ?? '—'}</div></td>
+                    <td className="p-2"><div className="text-center text-gray-500">{s.form?.district.name ?? '—'}</div></td>
+                    <td className="p-2"><div className="flex justify-center gap-1"><span className="rounded-full bg-violet-500/10 px-2.5 py-1 text-xs font-medium text-violet-700">{isTransfer ? 'Transfer' : statusLabel[s.status] ?? s.status}</span>{dupe && <span className="rounded-full bg-amber-500/15 px-2 py-1 text-[11px] font-medium text-amber-700 dark:text-amber-500">{dupe}</span>}</div></td>
+                    <td className="p-2"><div className="flex justify-center gap-2">{!isTransfer && <button className="text-sm font-medium text-gray-600 hover:text-gray-800 dark:text-gray-300" onClick={() => navigate(`/verification/${s.id}`)}>Detail</button>}{isTransfer && <span className="text-xs text-gray-400">Tinjau dari detail pemain</span>}{canReview && (isTransfer ? <><button className="text-sm font-medium text-red-600 hover:text-red-700 disabled:opacity-50" disabled={processing === s.id} onClick={() => decideTransfer(s.id, 'reject')}>Tolak</button><button className="text-sm font-medium text-violet-600 hover:text-violet-700 disabled:opacity-50" disabled={processing === s.id} onClick={() => decideTransfer(s.id, 'approve')}>{processing === s.id ? 'Memproses…' : 'Setujui'}</button></> : <><button className="text-sm font-medium text-red-600 hover:text-red-700 disabled:opacity-50" disabled={processing === s.id} onClick={() => review(s.id, 'REJECT')}>Tolak</button><button className="text-sm font-medium text-violet-600 hover:text-violet-700 disabled:opacity-50" disabled={processing === s.id} onClick={() => review(s.id, 'LINK')}>{processing === s.id ? 'Memproses…' : 'Setujui'}</button></>)}</div></td>
                   </tr>
                 })}
               </tbody>
@@ -106,27 +105,6 @@ export default function VerificationPage() {
           <PortalPagination meta={meta} onPageChange={setPage} />
         </div>}
       </section>
-
-      {detailLoading && <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4"><div className="rounded-xl bg-white p-6 shadow-lg dark:bg-gray-800"><p className="text-sm text-gray-500">Memuat detail…</p></div></div>}
-      {detailSubmission && <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
-        <div className="absolute inset-0 bg-gray-900/40" onClick={() => setDetailSubmission(null)} />
-        <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-gray-200 bg-white p-6 shadow-lg dark:border-gray-700/60 dark:bg-gray-800">
-          <div className="flex items-start justify-between"><div><p className="text-xs uppercase tracking-wide text-gray-400">Detail Pengajuan</p><h2 className="mt-1 text-xl font-bold text-gray-800 dark:text-gray-100">{detailSubmission.fullName}</h2></div><button className="text-gray-400" onClick={() => setDetailSubmission(null)} aria-label="Tutup">×</button></div>
-          <dl className="mt-5 space-y-3 text-sm">
-            <div className="flex justify-between gap-4"><dt className="text-gray-500">NIK</dt><dd className="text-right text-gray-800 dark:text-gray-100">{detailSubmission.nik ?? '—'}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-gray-500">Tempat lahir</dt><dd className="text-right text-gray-800 dark:text-gray-100">{detailSubmission.birthPlace ?? '—'}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-gray-500">Tanggal lahir</dt><dd className="text-right text-gray-800 dark:text-gray-100">{formatDate(detailSubmission.birthDate)}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-gray-500">Kelompok umur</dt><dd className="text-right text-gray-800 dark:text-gray-100">{detailSubmission.ageGroup ?? '—'}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-gray-500">WhatsApp</dt><dd className="text-right text-gray-800 dark:text-gray-100">{detailSubmission.whatsapp ?? '—'}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-gray-500">Instagram</dt><dd className="text-right text-gray-800 dark:text-gray-100">{detailSubmission.instagram ?? '—'}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-gray-500">Peringkat PNP</dt><dd className="text-right text-gray-800 dark:text-gray-100">{detailSubmission.pnpRank ?? '—'}{detailSubmission.pnpPeriod ? ` (${detailSubmission.pnpPeriod})` : ''}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-gray-500">Alamat</dt><dd className="max-w-[65%] text-right text-gray-800 dark:text-gray-100">{detailSubmission.address ?? '—'}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-gray-500">Form / distrik</dt><dd className="text-right text-gray-800 dark:text-gray-100">{detailSubmission.form?.title ?? '—'} / {detailSubmission.form?.district.name ?? '—'}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-gray-500">Foto</dt><dd className="text-right text-gray-800 dark:text-gray-100">{detailSubmission.files?.length ? `${detailSubmission.files.length} file` : 'Belum ada'}</dd></div>
-          </dl>
-          <div className="mt-6 flex justify-end gap-3 border-t border-gray-100 pt-5 dark:border-gray-700/60"><button className="text-sm text-gray-500" onClick={() => setDetailSubmission(null)}>Tutup</button>{canReview && <><button className="btn border border-red-200 bg-white text-sm text-red-600 dark:border-red-800 dark:bg-gray-800" onClick={() => { review(detailSubmission.id, 'REJECT'); setDetailSubmission(null) }}>Tolak</button><button className="btn bg-gray-900 text-sm text-white dark:bg-gray-100 dark:text-gray-800" onClick={() => { review(detailSubmission.id, 'LINK'); setDetailSubmission(null) }}>Setujui</button></>}</div>
-        </div>
-      </div>}
     </div>
   )
 }

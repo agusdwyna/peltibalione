@@ -11,6 +11,7 @@ import PlayerDetailPage from './modules/players/PlayerDetailPage'
 import PlayerSubmissionPage from './modules/players/PlayerSubmissionPage'
 import FormsPage from './modules/forms/FormsPage'
 import VerificationPage from './modules/verification/VerificationPage'
+import VerificationDetailPage from './modules/verification/VerificationDetailPage'
 import UsersPage from './modules/users/UsersPage'
 import AuditLogPage from './modules/audit-log/AuditLogPage'
 import SignIn from './pages/SignIn'
@@ -51,6 +52,7 @@ function App() {
           <Route path="/forms" element={<FormsPage />} />
           <Route path="/submissions" element={<PlaceholderPage title="Pengajuan" />} />
           <Route path="/verification" element={<VerificationPage />} />
+          <Route path="/verification/:submissionId" element={<VerificationDetailPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/audit-log" element={<AuditLogPage />} />
         </Route>

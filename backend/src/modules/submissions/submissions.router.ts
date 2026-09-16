@@ -1,12 +1,26 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import type { SubmissionStatus } from '@prisma/client'
+import { AppError } from '../../shared/errors/app-error'
 import rateLimit from 'express-rate-limit'
 import { authenticate } from '../../shared/middleware/authenticate'
 import { authorize, getDistrictScope, isCentralAdmin } from '../../shared/middleware/authorize'
 import { prisma } from '../../shared/database/prisma'
-import { paginationArgs, paginatedResponse, paginationSchema } from '../../shared/utils/pagination'
-import { createAdminSubmission, createSubmission, reviewSubmission } from './submissions.controller'
+import { paginationArgs, paginatedResponse } from '../../shared/utils/pagination'
+import { validate } from '../../shared/middleware/validate'
+import {
+  createAdminSubmission,
+  createSubmission,
+  reviewSubmission,
+} from './submissions.controller'
+import {
+  adminSubmissionSchema,
+  publicSubmissionSchema,
+  reviewSubmissionSchema,
+  submissionDetailQuerySchema,
+  submissionIdSchema,
+  submissionListQuerySchema,
+} from './submissions.schema'
 
 export const submissionsRouter = Router()
 
@@ -20,7 +34,7 @@ const publicSubmissionLimiter = rateLimit({
 })
 
 // Public: submit to a form (no auth)
-submissionsRouter.post('/public', publicSubmissionLimiter, createSubmission)
+submissionsRouter.post('/public', publicSubmissionLimiter, validate(publicSubmissionSchema), createSubmission)
 
 submissionsRouter.use(authenticate)
 
@@ -28,18 +42,19 @@ submissionsRouter.use(authenticate)
 submissionsRouter.post(
   '/direct',
   authorize({ roles: ['DISTRICT_ADMIN', 'CENTRAL_ADMIN'] }),
+  validate(adminSubmissionSchema),
   createAdminSubmission,
 )
 
 // GET /api/submissions — workspace-scoped review queue
-submissionsRouter.get('/', async (req, res, next) => {
+submissionsRouter.get('/', authorize({ roles: ['DISTRICT_ADMIN', 'CENTRAL_ADMIN'] }), validate(submissionListQuerySchema, 'query'), async (req, res, next) => {
   try {
-    const { page, pageSize } = paginationSchema.parse(req.query)
+    const { page, pageSize } = req.query as unknown as { page: number; pageSize: number }
     const central = isCentralAdmin(req)
     const districtId = getDistrictScope(req)
     const requestedDistrictId = req.query.districtId ? z.string().uuid().parse(String(req.query.districtId)) : undefined
     const search = typeof req.query.q === 'string' ? String(req.query.q).trim() : ''
-    if (central && !requestedDistrictId) throw new Error('DISTRICT_CONTEXT_REQUIRED')
+    if (central && !requestedDistrictId) throw AppError.badRequest('DISTRICT_CONTEXT_REQUIRED', 'Pilih workspace distrik terlebih dahulu')
     if (!central && requestedDistrictId && requestedDistrictId !== districtId) {
       return res.status(403).json({ error: { code: 'OUT_OF_DISTRICT_SCOPE', message: 'Out of district scope' } })
     }
@@ -52,12 +67,53 @@ submissionsRouter.get('/', async (req, res, next) => {
         where,
         ...paginationArgs({ page, pageSize }),
         orderBy: { createdAt: 'desc' },
-        include: { form: { select: { title: true, district: { select: { name: true } } } } },
+        select: {
+          id: true,
+          status: true,
+          fullName: true,
+          birthDate: true,
+          gender: true,
+          ageGroup: true,
+          duplicateMatch: true,
+          createdAt: true,
+          form: { select: { title: true, district: { select: { name: true } } } },
+        },
       }),
       prisma.formSubmission.count({ where }),
     ])
 
-    res.json(paginatedResponse(data, total, { page, pageSize }))
+    // Pending affiliation transfers are reviewed in the same queue, so they are
+    // returned alongside registrations with a discriminator field.
+    const transfers = await prisma.verificationRequest.findMany({
+      where: { entityType: 'DISTRICT_TRANSFER', status: 'PENDING', districtId: scopeDistrictId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        status: true,
+        createdAt: true,
+        payload: true,
+        district: { select: { name: true } },
+      },
+    })
+
+    const transferRows = transfers.map((transfer) => {
+      const payload = (transfer.payload ?? {}) as { fullName?: string; playerCode?: string; info?: string; fromDistrictName?: string }
+      return {
+        id: transfer.id,
+        kind: 'TRANSFER' as const,
+        status: 'TRANSFER_PENDING',
+        fullName: payload.fullName ?? '—',
+        birthDate: null,
+        gender: null,
+        ageGroup: null,
+        duplicateMatch: null,
+        createdAt: transfer.createdAt,
+        info: `Transfer dari ${payload.fromDistrictName ?? '—'}`,
+        form: { title: `Transfer ${payload.playerCode ?? ''}`.trim(), district: transfer.district },
+      }
+    })
+
+    res.json(paginatedResponse([...transferRows, ...data.map((row) => ({ ...row, kind: 'SUBMISSION' as const }))], total + transfers.length, { page, pageSize }))
   } catch (err) {
     if (err instanceof Error && err.message === 'DISTRICT_CONTEXT_REQUIRED') return res.status(400).json({ error: { code: err.message, message: 'Pilih workspace distrik terlebih dahulu' } })
     next(err)
@@ -65,7 +121,7 @@ submissionsRouter.get('/', async (req, res, next) => {
 })
 
 // GET /api/submissions/:id — scoped submission detail for review modal
-submissionsRouter.get('/:id', authorize({ roles: ['DISTRICT_ADMIN', 'CENTRAL_ADMIN'] }), async (req, res, next) => {
+submissionsRouter.get('/:id', authorize({ roles: ['DISTRICT_ADMIN', 'CENTRAL_ADMIN'] }), validate(submissionIdSchema, 'params'), validate(submissionDetailQuerySchema, 'query'), async (req, res, next) => {
   try {
     const central = isCentralAdmin(req)
     const jwtDistrictId = getDistrictScope(req)
@@ -79,6 +135,7 @@ submissionsRouter.get('/:id', authorize({ roles: ['DISTRICT_ADMIN', 'CENTRAL_ADM
     })
     if (!submission) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Submission not found' } })
     if (submission.form.districtId !== districtId) return res.status(403).json({ error: { code: 'OUT_OF_DISTRICT_SCOPE', message: 'Out of district scope' } })
+    // Detail may expose NIK only because this is an explicitly scoped admin view.
     res.json({ data: submission })
   } catch (err) { next(err) }
 })
@@ -87,5 +144,7 @@ submissionsRouter.get('/:id', authorize({ roles: ['DISTRICT_ADMIN', 'CENTRAL_ADM
 submissionsRouter.post(
   '/:id/review',
   authorize({ roles: ['DISTRICT_ADMIN', 'CENTRAL_ADMIN'] }),
+  validate(submissionIdSchema, 'params'),
+  validate(reviewSubmissionSchema),
   reviewSubmission,
 )

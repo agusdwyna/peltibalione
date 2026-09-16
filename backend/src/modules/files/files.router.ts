@@ -4,6 +4,8 @@ import rateLimit from 'express-rate-limit'
 import { randomUUID } from 'crypto'
 import path from 'path'
 import { authenticate } from '../../shared/middleware/authenticate'
+import { authorize } from '../../shared/middleware/authorize'
+import { prisma } from '../../shared/database/prisma'
 import { AppError } from '../../shared/errors/app-error'
 import { env } from '../../config/env'
 import { persistFile } from './files.service'
@@ -60,6 +62,27 @@ filesRouter.post('/public/upload', publicUploadLimiter, upload.single('file'), a
 })
 
 filesRouter.use(authenticate)
+
+// GET /api/files/:id — stream an uploaded image to an authorized admin session.
+filesRouter.get('/:id', authorize({ roles: ['CENTRAL_ADMIN', 'DISTRICT_ADMIN', 'PLAYER'] }), async (req, res, next) => {
+  try {
+    const id = String(req.params.id)
+    if (!/^[0-9a-fA-F-]{36}$/.test(id)) throw AppError.badRequest('INVALID_ID', 'Invalid file id')
+    const file = await prisma.file.findUnique({ where: { id } })
+    if (!file) throw AppError.notFound('File not found')
+    const dir = path.resolve(env.UPLOAD_DIR)
+    const absolute = path.resolve(dir, file.storageKey)
+    // Never allow escaping the upload directory via a crafted storage key.
+    if (!absolute.startsWith(dir)) throw AppError.forbidden('Invalid file path')
+    res.type(file.mimeType || 'application/octet-stream')
+    res.setHeader('Cache-Control', 'private, max-age=300')
+    res.sendFile(absolute, (error) => {
+      if (error && !res.headersSent) next(AppError.notFound('File content not found'))
+    })
+  } catch (err) {
+    next(err)
+  }
+})
 
 // POST /api/files/upload — upload file (JPEG/PNG only, ≤4MB)
 filesRouter.post('/upload', upload.single('file'), async (req, res, next) => {

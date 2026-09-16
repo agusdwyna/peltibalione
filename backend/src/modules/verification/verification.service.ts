@@ -19,8 +19,11 @@ export async function decide(
   if (vr.level === 'CENTRAL' && !scope.central) {
     throw AppError.forbidden('Central verification requires CENTRAL_ADMIN')
   }
-  if (vr.level === 'DISTRICT' && !scope.central && vr.districtId !== scope.districtId) {
+  if (vr.level === 'DISTRICT' && !scope.central && (!scope.districtId || vr.districtId !== scope.districtId)) {
     throw AppError.forbidden('Out of district scope')
+  }
+  if (vr.level === 'CENTRAL' && scope.central === false) {
+    throw AppError.forbidden('Central verification requires CENTRAL_ADMIN')
   }
 
   const updated = await prisma.$transaction(async (tx) => {
@@ -64,7 +67,7 @@ export async function decide(
             })
           }
         }
-      } else if (request.entityType === 'PLAYER') {
+      } else if (request.entityType === 'PLAYER_REJECTION') {
         const payload = request.payload as { playerId?: string }
         if (payload?.playerId) {
           await tx.player.update({

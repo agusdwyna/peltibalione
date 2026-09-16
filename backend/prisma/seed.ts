@@ -16,20 +16,20 @@ const DISTRICTS = [
   { code: 'TAB', name: 'Tabanan' },
 ]
 
-// Kelompok Umur (PUTRA/PA & PUTRI/PI) — kategory manual, bukan berbasis umur tahun.
+// Kelompok Umur (PRD §24) — band usia + gender; KU otomatis dari tahun lahir.
 const AGE_GROUPS = [
-  { code: 'KU 8', name: 'KU 8', minAge: 0, maxAge: 99, sortOrder: 1 },
-  { code: 'KU 10 PI', name: 'KU 10 Putri', minAge: 0, maxAge: 99, sortOrder: 2 },
-  { code: 'KU 10 PA', name: 'KU 10 Putra', minAge: 0, maxAge: 99, sortOrder: 3 },
-  { code: 'KU 12 PI', name: 'KU 12 Putri', minAge: 0, maxAge: 99, sortOrder: 4 },
-  { code: 'KU 12 PA', name: 'KU 12 Putra', minAge: 0, maxAge: 99, sortOrder: 5 },
-  { code: 'KU 14 PA', name: 'KU 14 Putra', minAge: 0, maxAge: 99, sortOrder: 6 },
-  { code: 'KU 14 PI', name: 'KU 14 Putri', minAge: 0, maxAge: 99, sortOrder: 7 },
-  { code: 'KU 16 PI', name: 'KU 16 Putri', minAge: 0, maxAge: 99, sortOrder: 8 },
-  { code: 'KU 16 PA', name: 'KU 16 Putra', minAge: 0, maxAge: 99, sortOrder: 9 },
-  { code: 'KU 18 PI', name: 'KU 18 Putri', minAge: 0, maxAge: 99, sortOrder: 10 },
-  { code: 'KU 18 PA', name: 'KU 18 Putra', minAge: 0, maxAge: 99, sortOrder: 11 },
-]
+  { code: 'KU 8', name: 'KU 8', minAge: 0, maxAge: 8, gender: null, sortOrder: 1 },
+  { code: 'KU 10 PI', name: 'KU 10 Putri', minAge: 9, maxAge: 10, gender: 'PUTRI', sortOrder: 2 },
+  { code: 'KU 10 PA', name: 'KU 10 Putra', minAge: 9, maxAge: 10, gender: 'PUTRA', sortOrder: 3 },
+  { code: 'KU 12 PI', name: 'KU 12 Putri', minAge: 11, maxAge: 12, gender: 'PUTRI', sortOrder: 4 },
+  { code: 'KU 12 PA', name: 'KU 12 Putra', minAge: 11, maxAge: 12, gender: 'PUTRA', sortOrder: 5 },
+  { code: 'KU 14 PA', name: 'KU 14 Putra', minAge: 13, maxAge: 14, gender: 'PUTRA', sortOrder: 6 },
+  { code: 'KU 14 PI', name: 'KU 14 Putri', minAge: 13, maxAge: 14, gender: 'PUTRI', sortOrder: 7 },
+  { code: 'KU 16 PI', name: 'KU 16 Putri', minAge: 15, maxAge: 16, gender: 'PUTRI', sortOrder: 8 },
+  { code: 'KU 16 PA', name: 'KU 16 Putra', minAge: 15, maxAge: 16, gender: 'PUTRA', sortOrder: 9 },
+  { code: 'KU 18 PI', name: 'KU 18 Putri', minAge: 17, maxAge: 18, gender: 'PUTRI', sortOrder: 10 },
+  { code: 'KU 18 PA', name: 'KU 18 Putra', minAge: 17, maxAge: 18, gender: 'PUTRA', sortOrder: 11 },
+] as const
 
 async function main() {
   console.log('🌱 Seeding districts...')
@@ -45,8 +45,8 @@ async function main() {
   for (const ag of AGE_GROUPS) {
     await prisma.ageGroup.upsert({
       where: { code: ag.code },
-      update: { name: ag.name, minAge: ag.minAge, maxAge: ag.maxAge, sortOrder: ag.sortOrder },
-      create: ag,
+      update: { name: ag.name, minAge: ag.minAge, maxAge: ag.maxAge, gender: ag.gender as 'PUTRA' | 'PUTRI' | null, sortOrder: ag.sortOrder },
+      create: { ...ag, gender: ag.gender as 'PUTRA' | 'PUTRI' | undefined },
     })
   }
 

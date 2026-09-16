@@ -3,7 +3,9 @@ import { AppError } from '../../shared/errors/app-error'
 import { writeAuditLog } from '../../shared/utils/audit'
 import { generatePlayerCode } from '../../shared/utils/player-code'
 import { resolveAgeGroup } from '../../shared/utils/age-group'
+import { ensureDistrictForm } from '../forms/forms.service'
 import type { PublicSubmissionInput, ReviewSubmissionInput } from './submissions.schema'
+import type { Gender } from '@prisma/client'
 
 /**
  * PRD §18 — duplicate detection.
@@ -61,6 +63,10 @@ async function createSubmissionForForm(
     birthDate: input.birthDate,
   })
 
+  // Age group is derived server-side. The client supplies the required gender,
+  // never a manually selected KU value.
+  const resolvedAgeGroup = await resolveAgeGroup(input.birthDate, null, input.gender)
+
   const submission = await prisma.formSubmission.create({
     data: {
       formId,
@@ -74,7 +80,8 @@ async function createSubmissionForForm(
       clubName: input.clubName,
       instagram: input.instagram,
       whatsapp: input.whatsapp,
-      ageGroup: input.ageGroup,
+      gender: input.gender,
+      ageGroup: resolvedAgeGroup?.code ?? null,
       pnpRank: input.pnpRank,
       pnpPeriod: input.pnpPeriod,
       duplicateMatch: match,
@@ -113,15 +120,10 @@ export async function createSubmissionInDistrict(
   districtId: string,
   actorId: string,
 ) {
-  const form = await prisma.registrationForm.findFirst({
-    where: { districtId, type: 'PLAYER_REGISTRATION', status: 'ACTIVE' },
-  })
-  if (!form) {
-    throw AppError.conflict(
-      'ACTIVE_FORM_REQUIRED',
-      'Tidak ada form pendaftaran aktif di workspace ini.',
-    )
-  }
+  // Admin entry is an internal operation and must not depend on a published
+  // public form. Reuse the district's form as a container, creating a draft
+  // automatically when this workspace has never opened one.
+  const form = await ensureDistrictForm(districtId, actorId)
   const result = await createSubmissionForForm(form.id, input)
   await writeAuditLog({
     actorId,
@@ -189,6 +191,7 @@ export async function reviewSubmission(
           fullName: submission.fullName,
           birthPlace: submission.birthPlace,
           birthDate: submission.birthDate,
+          gender: submission.gender,
           nik: submission.nik,
           address: submission.address,
           phone: submission.phone,
@@ -200,6 +203,7 @@ export async function reviewSubmission(
       person = await tx.person.update({
         where: { id: person.id },
         data: {
+          gender: submission.gender ?? person.gender,
           address: submission.address ?? person.address,
           phone: submission.phone ?? person.phone,
           instagram: submission.instagram ?? person.instagram,
@@ -225,9 +229,15 @@ export async function reviewSubmission(
     const district = await tx.district.findUniqueOrThrow({ where: { id: submission.form.districtId } })
     const playerCode = await generatePlayerCode(district.code)
 
-    // Kelompok umur diambil dari pilihan user (manual), bukan auto-resolve dari tanggal lahir
-    const ageGroup = submission.ageGroup
-      ? await tx.ageGroup.findFirst({ where: { code: submission.ageGroup } })
+    // PRD §24 — KU dihitung otomatis dari tanggal lahir + gender. The
+    // legacy stored ageGroup is retained only as a track-aware resolver hint.
+    const resolved = await resolveAgeGroup(
+      submission.birthDate,
+      submission.ageGroup,
+      (submission.gender as Gender | null) ?? undefined,
+    )
+    const ageGroup = resolved
+      ? await tx.ageGroup.findUnique({ where: { id: resolved.id } })
       : null
 
     const submissionFiles = await tx.file.findMany({
@@ -235,7 +245,10 @@ export async function reviewSubmission(
       orderBy: { createdAt: 'asc' },
       select: { id: true, entityType: true },
     })
-    const profilePhoto = submissionFiles.find((file) => file.entityType === 'SUBMISSION_PHOTO') ?? submissionFiles[0]
+    // Only the explicitly uploaded profile photo may become Player.photoId;
+    // never fall back to an achievement file.
+    const profilePhoto = submissionFiles.find((file) => file.entityType === 'SUBMISSION_PHOTO')
+    const achievementPhoto = submissionFiles.find((file) => file.entityType === 'SUBMISSION_ACHIEVEMENT')
 
     const player = await tx.player.create({
       data: {
@@ -250,6 +263,15 @@ export async function reviewSubmission(
       },
     })
 
+    // The registration photo becomes the player's permanent profile photo.
+    // Keep submissionId for traceability back to the original registration.
+    if (profilePhoto) {
+      await tx.file.update({
+        where: { id: profilePhoto.id },
+        data: { entityType: 'PLAYER_PHOTO', entityId: player.id, playerId: player.id },
+      })
+    }
+
     if (submission.pnpRank != null) {
       await tx.playerPnpRanking.create({
         data: {
@@ -258,6 +280,58 @@ export async function reviewSubmission(
           period: submission.pnpPeriod ?? String(new Date().getFullYear()),
           updatedBy: reviewerId,
         },
+      })
+    }
+
+    // A submission achievement photo is the initial evidence of one achievement.
+    // Do not create placeholder records when the optional photo is absent.
+    if (achievementPhoto) {
+      const trackRecord = await tx.playerTrackRecord.create({
+        data: {
+          playerId: player.id,
+          title: 'Prestasi olahraga',
+          eventName: 'Pengajuan pendaftaran pemain',
+          eventDate: submission.createdAt,
+          category: 'other',
+          result: 'PARTICIPANT',
+          description: 'Dokumentasi prestasi yang dilampirkan pada pengajuan pendaftaran pemain.',
+          createdBy: reviewerId,
+        },
+      })
+
+      const certificate = await tx.playerCertificate.create({
+        data: {
+          playerId: player.id,
+          trackRecordId: trackRecord.id,
+          title: 'Bukti prestasi olahraga',
+          issuer: 'PELTI Bali',
+          issuedAt: submission.createdAt,
+          notes: 'Dibuat otomatis dari foto prestasi pada pengajuan pendaftaran pemain.',
+          fileId: achievementPhoto.id,
+          createdBy: reviewerId,
+        },
+      })
+
+      await tx.file.update({
+        where: { id: achievementPhoto.id },
+        data: { entityType: 'PLAYER_CERTIFICATE', entityId: certificate.id },
+      })
+
+      await writeAuditLog({
+        actorId: reviewerId,
+        action: 'CREATE_PLAYER_TRACK_RECORD',
+        entityType: 'PLAYER_TRACK_RECORD',
+        entityId: trackRecord.id,
+        districtId: submission.form.districtId,
+        newValue: trackRecord,
+      })
+      await writeAuditLog({
+        actorId: reviewerId,
+        action: 'CREATE_PLAYER_CERTIFICATE',
+        entityType: 'PLAYER_CERTIFICATE',
+        entityId: certificate.id,
+        districtId: submission.form.districtId,
+        newValue: certificate,
       })
     }
 

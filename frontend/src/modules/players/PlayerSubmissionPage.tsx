@@ -1,45 +1,48 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useRef, useState } from 'react'
 import { api } from '../../lib/api'
 import { useAuthStore } from '../../stores/auth.store'
 import { useWorkspaceStore } from '../../stores/workspace.store'
-import type { AgeGroup } from '../../types/portal'
+import type { Gender } from '../../types/portal'
 
 export default function PlayerSubmissionPage() {
   const token = useAuthStore((state) => state.token)
   const user = useAuthStore((state) => state.user)
   const workspace = useWorkspaceStore((state) => state.selectedWorkspace)
   const isCentral = user?.roles.some((role) => role.role === 'CENTRAL_ADMIN') ?? false
-  const [ageGroups, setAgeGroups] = useState<AgeGroup[]>([])
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [photoId, setPhotoId] = useState<string | null>(null)
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null)
   const [achievementPhotoId, setAchievementPhotoId] = useState<string | null>(null)
-
-  useEffect(() => {
-    api.ageGroups.list().then(setAgeGroups).catch(() => {})
-  }, [])
+  const [achievementPreviewUrl, setAchievementPreviewUrl] = useState<string | null>(null)
+  const submitLock = useRef(false)
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (submitLock.current) return
+    submitLock.current = true
     setError(''); setMessage(''); setSubmitting(true)
-    const fd = new FormData(event.currentTarget)
+    // React nulls `currentTarget` once the handler returns, so keep a reference
+    // before awaiting — otherwise reset() throws after a successful submit.
+    const form = event.currentTarget
+    const fd = new FormData(form)
     if (!photoId) {
       setError('Foto diri wajib diunggah sebelum mengirim pengajuan.')
-      setSubmitting(false)
+      setSubmitting(false); submitLock.current = false
       return
     }
     try {
       const result = await api.submissions.createDirect(token!, {
         fullName: String(fd.get('fullName') ?? ''),
-        nik: String(fd.get('nik') ?? '') || undefined,
+        nik: String(fd.get('nik') ?? ''),
         birthPlace: String(fd.get('birthPlace') ?? ''),
         birthDate: String(fd.get('birthDate') ?? ''),
         address: String(fd.get('address') ?? ''),
         phone: String(fd.get('phone') ?? ''),
         instagram: String(fd.get('instagram') ?? '') || undefined,
         whatsapp: String(fd.get('whatsapp') ?? '') || undefined,
-        ageGroup: String(fd.get('ageGroup') ?? '') || undefined,
+        gender: String(fd.get('gender') ?? '') as Gender,
         pnpRank: Number(fd.get('pnpRank') ?? '') || undefined,
         pnpPeriod: '2026',
         photoId: photoId ?? undefined,
@@ -47,11 +50,11 @@ export default function PlayerSubmissionPage() {
         districtId: isCentral ? workspace?.id : undefined,
       })
       setMessage(`Pengajuan berhasil dikirim. Duplikat: ${result.duplicateMatch}.`)
-      event.currentTarget.reset()
-      setPhotoId(null); setAchievementPhotoId(null)
+      form.reset()
+      setPhotoId(null); setPhotoPreviewUrl(null); setAchievementPhotoId(null); setAchievementPreviewUrl(null)
     } catch {
       setError('Pengajuan tidak dapat dikirim. Pastikan ada form aktif dan data benar.')
-    } finally { setSubmitting(false) }
+    } finally { setSubmitting(false); submitLock.current = false }
   }
 
   const sectionClass = 'rounded-lg border border-gray-200 bg-gray-50/60 p-5 dark:border-gray-700/60 dark:bg-gray-900/20'
@@ -75,7 +78,7 @@ export default function PlayerSubmissionPage() {
               <label className="sm:col-span-2"><span className={labelClass}>Nama Lengkap <span className="text-red-500">*</span></span><input className="form-input w-full" name="fullName" required /></label>
               <label className="sm:col-span-2"><span className={labelClass}>NIK <span className="text-red-500">*</span></span><input className="form-input w-full" name="nik" pattern="\d{16}" title="16 digit" required /><span className="mt-1 block text-xs text-gray-500">16 digit.</span></label>
               <label><span className={labelClass}>Tempat Lahir</span><input className="form-input w-full" name="birthPlace" /></label>
-              <label><span className={labelClass}>Tanggal Lahir</span><input className="form-input w-full" name="birthDate" type="date" /></label>
+              <label><span className={labelClass}>Tanggal Lahir <span className="text-red-500">*</span></span><input className="form-input w-full" name="birthDate" type="date" required /></label>
               <label className="sm:col-span-2"><span className={labelClass}>Alamat</span><textarea className="form-textarea w-full" name="address" rows={3} /></label>
             </div>
           </section>
@@ -83,11 +86,8 @@ export default function PlayerSubmissionPage() {
           <section className={sectionClass}>
             <div className="mb-5"><h2 className="font-semibold text-gray-800 dark:text-gray-100">Kategori & Kontak</h2></div>
             <div className="grid gap-5 sm:grid-cols-2">
-              <label><span className={labelClass}>Kelompok Umur <span className="text-red-500">*</span></span>
-                <select className="form-select w-full" name="ageGroup" required>
-                  <option value="">Pilih KU</option>
-                  {ageGroups.map((g) => <option key={g.id} value={g.code}>{g.name}</option>)}
-                </select>
+              <label><span className={labelClass}>Jenis Kelamin <span className="text-red-500">*</span></span>
+                <select className="form-select w-full" name="gender" required><option value="">Pilih jenis kelamin</option><option value="PUTRA">Laki-laki</option><option value="PUTRI">Perempuan</option></select>
               </label>
               <label><span className={labelClass}>No. WhatsApp <span className="text-red-500">*</span></span><input className="form-input w-full" name="whatsapp" type="tel" required /></label>
               <label className="sm:col-span-2"><span className={labelClass}>Akun Instagram <span className="text-red-500">*</span></span><input className="form-input w-full" name="instagram" required /></label>
@@ -99,12 +99,12 @@ export default function PlayerSubmissionPage() {
             <div className="mb-5"><h2 className="font-semibold text-gray-800 dark:text-gray-100">Foto</h2><p className="mt-1 text-xs text-gray-500">JPEG/PNG maksimal 4MB. Unggah dulu sebelum submit.</p></div>
             <div className="grid gap-5 sm:grid-cols-2">
               <div><span className={labelClass}>Foto Diri <span className="text-red-500">*</span></span>
-                {photoId ? <div className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700">Terunggah ✓</div>
-                  : <input className="block w-full text-xs text-gray-500 file:mr-3 file:rounded file:border-0 file:bg-gray-900 file:px-3 file:py-2 file:text-xs file:text-gray-100" type="file" accept="image/jpeg,image/png" required={!photoId} onChange={async (e) => { const f = e.target.files?.[0]; if (!f) return; try { const r = await api.files.uploadPublic(f, 'photoId'); setPhotoId(r.id) } catch { setError('Upload gagal.') } }} />}
+                {photoId && photoPreviewUrl ? <div className="relative overflow-hidden rounded-lg border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900"><img className="h-24 w-24 object-cover" src={photoPreviewUrl} alt="Preview foto diri" /><button type="button" className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-gray-900/80 text-sm text-white hover:bg-gray-900" aria-label="Hapus foto diri" onClick={() => { URL.revokeObjectURL(photoPreviewUrl); setPhotoId(null); setPhotoPreviewUrl(null) }}>×</button></div>
+                  : <input className="block w-full text-xs text-gray-500 file:mr-3 file:rounded file:border-0 file:bg-gray-900 file:px-3 file:py-2 file:text-xs file:text-gray-100" type="file" accept="image/jpeg,image/png" required={!photoId} onChange={async (e) => { const f = e.target.files?.[0]; if (!f) return; try { const r = await api.files.uploadPublic(f, 'photoId'); setPhotoId(r.id); setPhotoPreviewUrl((current) => { if (current) URL.revokeObjectURL(current); return URL.createObjectURL(f) }) } catch { setError('Upload gagal.') } }} />}
               </div>
               <div><span className={labelClass}>Foto Prestasi <span className="font-normal text-gray-400">(opsional)</span></span>
-                {achievementPhotoId ? <div className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700">Terunggah ✓</div>
-                  : <input className="block w-full text-xs text-gray-500 file:mr-3 file:rounded file:border-0 file:bg-gray-900 file:px-3 file:py-2 file:text-xs file:text-gray-100" type="file" accept="image/jpeg,image/png" onChange={async (e) => { const f = e.target.files?.[0]; if (!f) return; try { const r = await api.files.uploadPublic(f, 'achievementPhotoId'); setAchievementPhotoId(r.id) } catch { setError('Upload gagal.') } }} />}
+                {achievementPhotoId && achievementPreviewUrl ? <div className="relative overflow-hidden rounded-lg border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900"><img className="h-24 w-24 object-cover" src={achievementPreviewUrl} alt="Preview foto prestasi" /><button type="button" className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-gray-900/80 text-sm text-white hover:bg-gray-900" aria-label="Hapus foto prestasi" onClick={() => { URL.revokeObjectURL(achievementPreviewUrl); setAchievementPhotoId(null); setAchievementPreviewUrl(null) }}>×</button></div>
+                  : <input className="block w-full text-xs text-gray-500 file:mr-3 file:rounded file:border-0 file:bg-gray-900 file:px-3 file:py-2 file:text-xs file:text-gray-100" type="file" accept="image/jpeg,image/png" onChange={async (e) => { const f = e.target.files?.[0]; if (!f) return; try { const r = await api.files.uploadPublic(f, 'achievementPhotoId'); setAchievementPhotoId(r.id); setAchievementPreviewUrl((current) => { if (current) URL.revokeObjectURL(current); return URL.createObjectURL(f) }) } catch { setError('Upload gagal.') } }} />}
               </div>
             </div>
           </section>

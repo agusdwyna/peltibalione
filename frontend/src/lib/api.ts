@@ -1,5 +1,5 @@
 import { authUserSchema, districtSchema, type AuthUser, type District } from '../types/auth'
-import { ageGroupSchema, certificateSchema, checkStatusResultSchema, formSchema, paginationMetaSchema, playerDetailSchema, playerSchema, pnpRankingSchema, publicDistrictOverviewSchema, publicSubmissionSchema, statsOverviewSchema, submissionDetailSchema, submissionSchema, trackRecordSchema, verificationSchema, type PublicSubmissionInput } from '../types/portal'
+import { ageGroupSchema, certificateSchema, checkStatusResultSchema, formSchema, paginationMetaSchema, playerDetailSchema, playerSchema, pnpRankingSchema, publicDistrictOverviewSchema, publicSubmissionSchema, statsOverviewSchema, submissionDetailSchema, submissionSchema, trackRecordSchema, updatePlayerPersonalInfoSchema, verificationSchema, type PublicSubmissionInput, type UpdatePlayerPersonalInfoInput } from '../types/portal'
 import { auditLogSchema, managedUserSchema, type CreateUserInput, type UpdateUserInput } from '../types/system'
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:4000/api'
@@ -82,6 +82,11 @@ export const api = {
     },
   },
   files: {
+    async fetchBlobUrl(token: string, id: string) {
+      const response = await fetch(`${API_BASE_URL}/files/${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${token}` } })
+      if (!response.ok) throw new ApiError('Berkas tidak dapat dimuat', response.status)
+      return URL.createObjectURL(await response.blob())
+    },
     async uploadPublic(file: File, field: 'photoId' | 'achievementPhotoId') {
       const body = new FormData()
       body.append('file', file)
@@ -106,18 +111,32 @@ export const api = {
     },
   },
   players: {
-    async list(token: string, params: { page?: number; pageSize?: number; districtId?: string; q?: string } = {}) {
+    async list(token: string, params: { page?: number; pageSize?: number; districtId?: string; q?: string; gender?: 'PUTRA' | 'PUTRI'; ageGroup?: string } = {}) {
       const query = new URLSearchParams()
       if (params.page) query.set('page', String(params.page))
       if (params.pageSize) query.set('pageSize', String(params.pageSize))
       if (params.districtId) query.set('districtId', params.districtId)
       if (params.q) query.set('q', params.q)
+      if (params.gender) query.set('gender', params.gender)
+      if (params.ageGroup) query.set('ageGroup', params.ageGroup)
       const payload = await request<{ data: unknown; meta: unknown }>(`/players?${query}`, { token })
       return { data: playerSchema.array().parse(payload.data), meta: paginationMetaSchema.parse(payload.meta) }
     },
     async get(token: string, id: string) {
       const payload = await request<unknown>(`/players/${encodeURIComponent(id)}`, { token })
       return playerDetailSchema.parse(payload)
+    },
+    async requestTransfer(token: string, id: string, toDistrictId: string) {
+      const payload = await request<{ data: unknown }>(`/players/${encodeURIComponent(id)}/transfer`, { method: 'POST', token, body: JSON.stringify({ toDistrictId }) })
+      return payload.data as { id: string }
+    },
+    async updatePersonalInfo(token: string, id: string, input: UpdatePlayerPersonalInfoInput) {
+      const payload = await request<{ data: unknown }>(`/players/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        token,
+        body: JSON.stringify(updatePlayerPersonalInfoSchema.parse(input)),
+      })
+      return playerDetailSchema.parse(payload.data)
     },
     async addPnpRanking(token: string, playerId: string, input: { rank: number; period: string }) {
       const payload = await request<{ data: unknown }>(`/players/${encodeURIComponent(playerId)}/pnp-rankings`, { method: 'POST', token, body: JSON.stringify(input) })
@@ -165,8 +184,9 @@ export const api = {
     },
   },
   forms: {
-    async list(token: string) {
-      const payload = await request<{ data: unknown }>('/forms', { token })
+    async list(token: string, options: { districtId?: string } = {}) {
+      const query = options.districtId ? `?districtId=${encodeURIComponent(options.districtId)}` : ''
+      const payload = await request<{ data: unknown }>(`/forms${query}`, { token })
       return formSchema.array().parse(payload.data)
     },
     async create(token: string, input: { title: string; description?: string }) {

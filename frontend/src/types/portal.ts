@@ -9,9 +9,12 @@ export const statsOverviewSchema = z.object({
 })
 export type StatsOverview = z.infer<typeof statsOverviewSchema>
 
+export const genderSchema = z.enum(['PUTRA', 'PUTRI'])
+export type Gender = z.infer<typeof genderSchema>
+
 export const playerSchema = z.object({
   id: z.string(), playerCode: z.string(), status: z.string(), ageGroup: z.string().nullable().optional(),
-  person: z.object({ fullName: z.string(), nik: z.string().nullable().optional() }),
+  person: z.object({ fullName: z.string(), nik: z.string().nullable().optional(), gender: genderSchema.nullable().optional() }),
   district: z.object({ name: z.string(), code: z.string() }),
   club: z.object({ name: z.string() }).nullable().optional(),
 })
@@ -44,12 +47,13 @@ export const playerDetailSchema = z.object({
   id: z.string(), playerCode: z.string(), status: z.string(), ageGroup: z.string().nullable().optional(),
   createdAt: z.string().optional(), updatedAt: z.string().optional(),
   person: z.object({
-    fullName: z.string(), nik: z.string().nullable().optional(), birthPlace: z.string().nullable().optional(),
+    fullName: z.string(), nik: z.string().nullable().optional(), gender: genderSchema.nullable().optional(), birthPlace: z.string().nullable().optional(),
     birthDate: z.string().nullable().optional(), address: z.string().nullable().optional(), phone: z.string().nullable().optional(),
     instagram: z.string().nullable().optional(), whatsapp: z.string().nullable().optional(),
   }),
   district: z.object({ id: z.string().optional(), name: z.string(), code: z.string() }),
   club: z.object({ name: z.string(), districtId: z.string().nullable().optional() }).nullable().optional(),
+  photo: z.object({ id: z.string(), originalName: z.string(), mimeType: z.string(), size: z.number() }).nullable().optional(),
   pnpRankings: pnpRankingSchema.array().optional(),
   trackRecords: trackRecordSchema.array().optional(),
   certificates: certificateSchema.array().optional(),
@@ -60,6 +64,20 @@ export const playerDetailSchema = z.object({
   })).optional(),
 })
 export type PlayerDetail = z.infer<typeof playerDetailSchema>
+
+export const updatePlayerPersonalInfoSchema = z.object({
+  fullName: z.string().trim().min(1).optional(),
+  nik: z.string().trim().regex(/^\d{16}$/, 'NIK harus 16 digit').optional(),
+  gender: genderSchema.nullable().optional(),
+  birthPlace: z.string().trim().nullable().optional(),
+  birthDate: z.string().nullable().optional(),
+  address: z.string().trim().nullable().optional(),
+  phone: z.string().trim().nullable().optional(),
+  instagram: z.string().trim().nullable().optional(),
+  whatsapp: z.string().trim().nullable().optional(),
+  confirmIdentityChange: z.boolean().optional(),
+})
+export type UpdatePlayerPersonalInfoInput = z.infer<typeof updatePlayerPersonalInfoSchema>
 
 export const formSchema = z.object({
   id: z.string(), title: z.string(), description: z.string().nullable().optional(), publicToken: z.string(), status: z.string(),
@@ -73,7 +91,8 @@ export type RegistrationForm = z.infer<typeof formSchema>
 export const submissionSchema = z.object({
   id: z.string(), fullName: z.string(), birthPlace: z.string().nullable().optional(), birthDate: z.string().nullable().optional(),
   nik: z.string().nullable().optional(), status: z.string(), duplicateMatch: z.string().nullable().optional(), rejectionReason: z.string().nullable().optional(),
-  instagram: z.string().nullable().optional(), whatsapp: z.string().nullable().optional(), ageGroup: z.string().nullable().optional(),
+  instagram: z.string().nullable().optional(), whatsapp: z.string().nullable().optional(), gender: genderSchema.nullable().optional(), ageGroup: z.string().nullable().optional(),
+  kind: z.enum(['SUBMISSION', 'TRANSFER']).optional(), info: z.string().nullable().optional(),
   form: z.object({ title: z.string(), district: z.object({ name: z.string() }) }).optional(),
 })
 export type Submission = z.infer<typeof submissionSchema>
@@ -93,7 +112,8 @@ export const verificationSchema = z.object({
 export type VerificationRequest = z.infer<typeof verificationSchema>
 
 export const ageGroupSchema = z.object({
-  id: z.string(), code: z.string(), name: z.string(), sortOrder: z.number(),
+  id: z.string(), code: z.string(), name: z.string(), minAge: z.number().optional(), maxAge: z.number().nullable().optional(),
+  gender: genderSchema.nullable().optional(), sortOrder: z.number(),
 })
 export type AgeGroup = z.infer<typeof ageGroupSchema>
 
@@ -112,9 +132,9 @@ export const checkStatusResultSchema = z.object({
 export type CheckStatusResult = z.infer<typeof checkStatusResultSchema>
 
 export const publicSubmissionSchema = z.object({
-  formToken: z.string().min(1), fullName: z.string().min(1), birthPlace: z.string().optional(), birthDate: z.string().optional(),
-  nik: z.string().regex(/^\d{16}$/, 'NIK harus terdiri dari 16 digit').optional(), address: z.string().optional(), phone: z.string().optional(),
-  clubName: z.string().optional(), instagram: z.string().optional(), whatsapp: z.string().optional(), ageGroup: z.string().optional(),
+  formToken: z.string().min(1), fullName: z.string().min(1), birthPlace: z.string().optional(), birthDate: z.string().min(1),
+  gender: genderSchema, nik: z.string().regex(/^\d{16}$/, 'NIK harus terdiri dari 16 digit'), address: z.string().optional(), phone: z.string().optional(),
+  clubName: z.string().optional(), instagram: z.string().optional(), whatsapp: z.string().optional(),
   pnpRank: z.coerce.number().int().positive().optional(), pnpPeriod: z.string().optional(),
   photoId: z.string().min(1, 'Foto diri wajib diunggah'), achievementPhotoId: z.string().optional(),
 })

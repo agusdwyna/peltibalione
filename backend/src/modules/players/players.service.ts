@@ -1,9 +1,11 @@
 import type { Request } from 'express'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '../../shared/database/prisma'
 import { AppError } from '../../shared/errors/app-error'
 import { getDistrictScope, isCentralAdmin } from '../../shared/middleware/authorize'
 import { writeAuditLog } from '../../shared/utils/audit'
 import { maskNik } from '../../shared/utils/mask-nik'
+import { resolveAgeGroup } from '../../shared/utils/age-group'
 import type {
   CreateCertificateInput,
   CreatePnpRankingInput,
@@ -11,6 +13,7 @@ import type {
   CreateTrackRecordInput,
   UpdateCertificateInput,
   UpdateTrackRecordInput,
+  UpdatePersonalInfoInput,
 } from './players.schema'
 
 const playerDetailInclude = {
@@ -25,18 +28,26 @@ const playerDetailInclude = {
     orderBy: [{ issuedAt: 'desc' as const }, { createdAt: 'desc' as const }],
     include: { file: { select: { id: true, originalName: true, mimeType: true, size: true } } },
   },
-  districtHistory: { orderBy: { changedAt: 'desc' as const } },
+  districtHistory: {
+    orderBy: { changedAt: 'desc' as const },
+    include: {
+      fromDistrict: { select: { name: true } },
+      toDistrict: { select: { name: true } },
+    },
+  },
 }
 
-function publicPlayerDetail(player: any) {
+function publicPlayerDetail(player: any, req: Request) {
   const { user: _user, nik, ...person } = player.person
   const { ...safePlayer } = player
   delete safePlayer.person.user
+  // NIK is sensitive: only an explicitly scoped admin detail may see it.
+  const showFullNik = isCentralAdmin(req) || Boolean(getDistrictScope(req))
   return {
     ...safePlayer,
     person: {
       ...person,
-      nik: nik ? maskNik(nik) : null,
+      nik: showFullNik ? nik : nik ? maskNik(nik) : null,
     },
   }
 }
@@ -45,7 +56,159 @@ export async function getPlayerDetail(playerId: string, req: Request) {
   const player = await prisma.player.findUnique({ where: { id: playerId }, include: playerDetailInclude })
   if (!player) throw AppError.notFound('Player not found')
   assertPlayerAccess(player.districtId, player.person.user?.id, req)
-  return publicPlayerDetail(player)
+
+  const resolved = await resolveAgeGroup(player.person.birthDate, player.ageGroup, player.person.gender)
+  const nextAgeGroupId = resolved?.id ?? null
+  const nextAgeGroup = resolved?.code ?? null
+  if (player.ageGroupId !== nextAgeGroupId || player.ageGroup !== nextAgeGroup) {
+    await prisma.player.update({ where: { id: player.id }, data: { ageGroupId: nextAgeGroupId, ageGroup: nextAgeGroup } })
+    player.ageGroupId = nextAgeGroupId
+    player.ageGroup = nextAgeGroup
+    player.ageGroupRef = resolved ? await prisma.ageGroup.findUnique({ where: { id: resolved.id } }) : null
+  }
+
+  return publicPlayerDetail(player, req)
+}
+
+/** Never persist a raw NIK into the audit trail. */
+function auditPerson(person: { fullName: string; nik: string | null; gender: string | null; birthPlace: string | null; birthDate: Date | null; address: string | null; phone: string | null; instagram: string | null; whatsapp: string | null }) {
+  return {
+    fullName: person.fullName,
+    nik: person.nik ? maskNik(person.nik) : null,
+    gender: person.gender,
+    birthPlace: person.birthPlace,
+    birthDate: person.birthDate,
+    address: person.address,
+    phone: person.phone,
+    instagram: person.instagram,
+    whatsapp: person.whatsapp,
+  }
+}
+
+export async function updatePersonalInfo(playerId: string, input: UpdatePersonalInfoInput, req: Request) {
+  const player = await getScopedPlayer(playerId, req)
+  const actorId = requireActor(req)
+  const { confirmIdentityChange, ...changes } = input
+  const oldPerson = await prisma.person.findUnique({ where: { id: player.personId } })
+  if (!oldPerson) throw AppError.notFound('Person not found')
+
+  // NIK and gender are identity fields: require the explicit confirmation flag
+  // sent by the client's confirmation dialog, and admin-level authority.
+  const touchesIdentity = changes.nik !== undefined || changes.gender !== undefined
+  if (touchesIdentity) {
+    if (!confirmIdentityChange) {
+      throw AppError.badRequest('CONFIRMATION_REQUIRED', 'Perubahan data identitas memerlukan konfirmasi')
+    }
+    if (!isCentralAdmin(req) && !getDistrictScope(req)) {
+      throw AppError.forbidden('Hanya admin yang dapat mengubah data identitas')
+    }
+  }
+
+  // Person.nik and User.nik are separately unique — changing NIK must not
+  // collide with either table.
+  if (changes.nik && changes.nik !== oldPerson.nik) {
+    const [personClash, userClash] = await Promise.all([
+      prisma.person.findUnique({ where: { nik: changes.nik }, select: { id: true } }),
+      prisma.user.findUnique({ where: { nik: changes.nik }, select: { id: true } }),
+    ])
+    if (personClash) throw AppError.conflict('NIK_ALREADY_USED', 'NIK sudah digunakan pemain lain')
+    if (userClash) throw AppError.conflict('NIK_ALREADY_USED', 'NIK sudah terhubung ke akun pengguna')
+  }
+
+  const updatedPerson = await prisma.$transaction(async (tx) => {
+    const person = await tx.person.update({ where: { id: player.personId }, data: changes })
+    // Keep the linked account's NIK in sync when one exists.
+    if (changes.nik && player.person.user?.id) {
+      await tx.user.update({ where: { id: player.person.user.id }, data: { nik: changes.nik } })
+    }
+    return person
+  })
+
+  const resolved = await resolveAgeGroup(updatedPerson.birthDate, player.ageGroup, updatedPerson.gender)
+  const nextAgeGroupId = resolved?.id ?? null
+  const nextAgeGroup = resolved?.code ?? null
+  const updatedPlayer = (player.ageGroupId !== nextAgeGroupId || player.ageGroup !== nextAgeGroup)
+    ? await prisma.player.update({
+        where: { id: player.id },
+        data: { ageGroupId: nextAgeGroupId, ageGroup: nextAgeGroup },
+      })
+    : player
+
+  await writeAuditLog({
+    actorId,
+    action: touchesIdentity ? 'UPDATE_PLAYER_IDENTITY' : 'UPDATE_PERSONAL_INFO',
+    entityType: 'PLAYER',
+    entityId: player.id,
+    districtId: player.districtId,
+    oldValue: { person: auditPerson(oldPerson), ageGroup: player.ageGroup },
+    newValue: { person: auditPerson(updatedPerson), ageGroup: updatedPlayer.ageGroup },
+  })
+
+  return getPlayerDetail(playerId, req)
+}
+
+/**
+ * Request an affiliation transfer to another district.
+ * Creates a PENDING DISTRICT_TRANSFER verification owned by the TARGET
+ * district, so the receiving district admin resolves it from Review Pendaftaran.
+ */
+export async function requestTransfer(playerId: string, toDistrictId: string, req: Request) {
+  const player = await getScopedPlayer(playerId, req)
+  const actorId = requireActor(req)
+
+  if (player.districtId === toDistrictId) {
+    throw AppError.badRequest('SAME_DISTRICT', 'Pemain sudah terdaftar di kabupaten tujuan')
+  }
+
+  const target = await prisma.district.findUnique({ where: { id: toDistrictId } })
+  if (!target) throw AppError.notFound('Kabupaten tujuan tidak ditemukan')
+
+  // A district admin may only initiate a transfer for a player in their own
+  // district. Central admin may initiate any transfer.
+  if (!isCentralAdmin(req) && player.districtId !== getDistrictScope(req)) {
+    throw AppError.forbidden('Pemain berada di luar cakupan kabupaten Anda')
+  }
+
+  const pending = await prisma.verificationRequest.findFirst({
+    where: { entityType: 'DISTRICT_TRANSFER', status: 'PENDING', entityId: player.id },
+  })
+  if (pending) throw AppError.conflict('TRANSFER_PENDING', 'Sudah ada permintaan transfer yang menunggu tinjauan')
+
+  const [fromDistrict, person] = await Promise.all([
+    prisma.district.findUnique({ where: { id: player.districtId }, select: { name: true, code: true } }),
+    prisma.person.findUnique({ where: { id: player.personId }, select: { fullName: true } }),
+  ])
+
+  const request = await prisma.verificationRequest.create({
+    data: {
+      entityType: 'DISTRICT_TRANSFER',
+      entityId: player.id,
+      level: 'DISTRICT',
+      status: 'PENDING',
+      districtId: toDistrictId,
+      requestedBy: actorId,
+      payload: {
+        playerId: player.id,
+        playerCode: player.playerCode,
+        fullName: person?.fullName ?? null,
+        fromDistrictId: player.districtId,
+        fromDistrictName: fromDistrict?.name ?? null,
+        toDistrictId,
+        toDistrictName: target.name,
+      },
+    },
+  })
+
+  await writeAuditLog({
+    actorId,
+    action: 'REQUEST_DISTRICT_TRANSFER',
+    entityType: 'PLAYER',
+    entityId: player.id,
+    districtId: player.districtId,
+    newValue: { toDistrictId, verificationRequestId: request.id },
+  })
+
+  return request
 }
 
 export async function getScopedPlayer(playerId: string, req: Request) {

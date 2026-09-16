@@ -1,43 +1,62 @@
 import { prisma } from '../database/prisma'
 
-/**
- * PRD §24 — resolve age group from birth date.
- * Age is computed as `currentYear - birthYear` (year-only, no month/day precision).
- *
- * Band boundaries (master data in `age_groups`):
- *   KU-10  → age ≤ 10
- *   KU-12  → 11–12
- *   KU-14  → 13–14
- *   KU-16  → 15–16
- *   KU-18  → 17–18
- *   OPEN   → 19+ (future ceiling, entries may be absent today)
- */
-export async function resolveAgeGroup(birthDate: Date | undefined | null): Promise<{
+export type Gender = 'PUTRA' | 'PUTRI'
+
+type AgeGroupResolution = {
   id: string
   code: string
-} | null> {
+}
+
+/**
+ * Resolve the current age group while retaining the selected PA/PI track.
+ *
+ * `selectedAgeGroup` is the previously selected group code. When it is a
+ * gendered group, its gender is the authority for promotion (for example,
+ * KU 14 PA -> KU 16 PA). The optional legacy gender is only used when there
+ * is no gendered selected group, so old records can still be synchronised.
+ */
+export async function resolveAgeGroup(
+  birthDate: Date | undefined | null,
+  selectedAgeGroup?: string | null,
+  legacyGender?: Gender | null,
+): Promise<AgeGroupResolution | null> {
   if (!birthDate) return null
 
+  const selected = selectedAgeGroup
+    ? await prisma.ageGroup.findUnique({
+        where: { code: selectedAgeGroup },
+        select: { id: true, code: true, gender: true },
+      })
+    : null
+  const gender = selected?.gender ?? legacyGender ?? null
   const age = new Date().getFullYear() - birthDate.getFullYear()
 
   const group = await prisma.ageGroup.findFirst({
     where: {
       minAge: { lte: age },
-      OR: [{ maxAge: { gte: age } }, { maxAge: null }],
+      AND: [
+        { OR: [{ maxAge: { gte: age } }, { maxAge: null }] },
+        ...(gender ? [{ OR: [{ gender }, { gender: null }] }] : []),
+      ],
     },
     orderBy: { sortOrder: 'asc' },
     select: { id: true, code: true },
   })
 
-  // Fallback: oldest band with no upper bound (OPEN).
-  if (!group) {
-    const open = await prisma.ageGroup.findFirst({
-      where: { maxAge: null },
-      orderBy: { sortOrder: 'asc' },
-      select: { id: true, code: true },
-    })
-    return open ?? null
-  }
+  if (group) return group
 
-  return group
+  // Prefer an OPEN group for the retained track, if one exists.
+  const open = await prisma.ageGroup.findFirst({
+    where: {
+      maxAge: null,
+      ...(gender ? { OR: [{ gender }, { gender: null }] } : {}),
+    },
+    orderBy: { sortOrder: 'asc' },
+    select: { id: true, code: true },
+  })
+  if (open) return open
+
+  // Keep a valid selected value when the master data has no band for the age.
+  // This prevents a lazy sync from erasing a manually selected legacy group.
+  return selected ? { id: selected.id, code: selected.code } : null
 }

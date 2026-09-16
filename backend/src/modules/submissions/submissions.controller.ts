@@ -22,6 +22,9 @@ export async function createAdminSubmission(req: Request, res: Response, next: N
     // District Admin: scope from token. Central Admin: explicit districtId in body.
     const districtId = getDistrictScope(req) ?? bodyDistrictId
     if (!districtId) throw AppError.forbidden('District scope or districtId required')
+    if (!isCentralAdmin(req) && bodyDistrictId && bodyDistrictId !== getDistrictScope(req)) {
+      throw AppError.forbidden('Out of district scope')
+    }
     const result = await submissionsService.createSubmissionInDistrict(
       input,
       districtId,

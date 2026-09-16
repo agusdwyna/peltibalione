@@ -1,11 +1,11 @@
 import { Router } from 'express'
-import type { PlayerStatus } from '@prisma/client'
+import type { PlayerStatus, Prisma } from '@prisma/client'
 import { authenticate } from '../../shared/middleware/authenticate'
 import { authorize, getDistrictScope, isCentralAdmin } from '../../shared/middleware/authorize'
 import { prisma } from '../../shared/database/prisma'
 import { validate } from '../../shared/middleware/validate'
 import { paginationArgs, paginatedResponse, paginationSchema } from '../../shared/utils/pagination'
-import { maskNik } from '../../shared/utils/mask-nik'
+import { resolveAgeGroup } from '../../shared/utils/age-group'
 import {
   createCertificate,
   createTrackRecord,
@@ -20,6 +20,8 @@ import {
   getPlayerDetail,
   updateCertificate,
   updateTrackRecord,
+  updatePersonalInfo,
+  requestTransfer,
 } from './players.service'
 import {
   createCertificateSchema,
@@ -30,6 +32,8 @@ import {
   playerIdSchema,
   updateCertificateSchema,
   updateTrackRecordSchema,
+  updatePersonalInfoSchema,
+  transferPlayerSchema,
 } from './players.schema'
 
 export const playersRouter = Router()
@@ -48,12 +52,15 @@ playersRouter.get('/', authorize({ roles: ['CENTRAL_ADMIN', 'DISTRICT_ADMIN'] })
 
     const filterDistrict = central && req.query.districtId ? String(req.query.districtId) : undefined
     const search = typeof req.query.q === 'string' ? req.query.q.trim() : ''
+    const gender = req.query.gender === 'PUTRA' || req.query.gender === 'PUTRI' ? req.query.gender : undefined
+    const ageGroup = typeof req.query.ageGroup === 'string' ? req.query.ageGroup.trim() : ''
     const officialStatuses = { in: ['VERIFIED', 'ACTIVE', 'INACTIVE'] as PlayerStatus[] }
     const scopeWhere = central ? (filterDistrict ? { districtId: filterDistrict } : {}) : { districtId: districtId! }
-    const where = {
+    const where: Prisma.PlayerWhereInput = {
       ...scopeWhere,
       status: officialStatuses,
-      ...(search ? { person: { fullName: { contains: search, mode: 'insensitive' as const } } } : {}),
+      ...(search || gender ? { person: { ...(search ? { fullName: { contains: search, mode: 'insensitive' as const } } : {}), ...(gender ? { gender } : {}) } } : {}),
+      ...(ageGroup ? { ageGroup } : {}),
     }
 
     const [data, total] = await Promise.all([
@@ -62,7 +69,7 @@ playersRouter.get('/', authorize({ roles: ['CENTRAL_ADMIN', 'DISTRICT_ADMIN'] })
         ...paginationArgs({ page, pageSize }),
         orderBy: { createdAt: 'desc' },
         include: {
-          person: { select: { fullName: true, nik: true } },
+          person: { select: { fullName: true, nik: true, gender: true, birthDate: true } },
           district: { select: { name: true, code: true } },
           club: { select: { name: true } },
         },
@@ -70,7 +77,37 @@ playersRouter.get('/', authorize({ roles: ['CENTRAL_ADMIN', 'DISTRICT_ADMIN'] })
       prisma.player.count({ where }),
     ])
 
-    res.json(paginatedResponse(data.map((player) => ({ ...player, person: { ...player.person, nik: player.person.nik ? maskNik(player.person.nik) : null } })), total, { page, pageSize }))
+    const synced = await Promise.all(data.map(async (player) => {
+      const resolved = await resolveAgeGroup(player.person.birthDate, player.ageGroup, player.person.gender)
+      const nextAgeGroupId = resolved?.id ?? null
+      const nextAgeGroup = resolved?.code ?? null
+      if (player.ageGroupId !== nextAgeGroupId || player.ageGroup !== nextAgeGroup) {
+        await prisma.player.update({ where: { id: player.id }, data: { ageGroupId: nextAgeGroupId, ageGroup: nextAgeGroup } })
+        return { ...player, ageGroupId: nextAgeGroupId, ageGroup: nextAgeGroup }
+      }
+      return player
+    }))
+
+    // Administrators are authorized to view full NIK (PRD: data pemilik wewenang).
+    res.json(paginatedResponse(synced, total, { page, pageSize }))
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /api/players/:id/transfer — request affiliation transfer to another district
+playersRouter.post('/:id/transfer', authorize({ roles: ['CENTRAL_ADMIN', 'DISTRICT_ADMIN'] }), validate(playerIdSchema, 'params'), validate(transferPlayerSchema), async (req, res, next) => {
+  try {
+    res.status(201).json({ data: await requestTransfer(String(req.params.id), req.body.toDistrictId, req) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// PATCH /api/players/:id — allowlisted personal information only
+playersRouter.patch('/:id', playerReadAndMutationRoles, validate(playerIdSchema, 'params'), validate(updatePersonalInfoSchema), async (req, res, next) => {
+  try {
+    res.json({ data: await updatePersonalInfo(String(req.params.id), req.body, req) })
   } catch (err) {
     next(err)
   }
