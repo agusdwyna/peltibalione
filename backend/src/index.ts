@@ -9,6 +9,12 @@ import { districtsRouter } from './modules/districts/districts.router'
 import { playersRouter } from './modules/players/players.router'
 import { clubsRouter } from './modules/clubs/clubs.router'
 import { formsRouter } from './modules/forms/forms.router'
+import { facilitiesRouter } from './modules/facilities/facilities.router'
+import { facilitySubmissionsRouter } from './modules/facilities/facility-submissions.router'
+import { coachesRouter } from './modules/coaches/coaches.router'
+import { coachSubmissionsRouter } from './modules/coaches/coach-submissions.router'
+import { officialsRouter } from './modules/officials/officials.router'
+import { officialSubmissionsRouter } from './modules/officials/official-submissions.router'
 import { submissionsRouter } from './modules/submissions/submissions.router'
 import { verificationRouter } from './modules/verification/verification.router'
 import { auditRouter } from './modules/audit/audit.router'
@@ -35,6 +41,12 @@ app.use('/api/districts', districtsRouter)
 app.use('/api/players', playersRouter)
 app.use('/api/clubs', clubsRouter)
 app.use('/api/forms', formsRouter)
+app.use('/api/facilities', facilitiesRouter)
+app.use('/api/facility-submissions', facilitySubmissionsRouter)
+app.use('/api/coaches', coachesRouter)
+app.use('/api/coach-submissions', coachSubmissionsRouter)
+app.use('/api/officials', officialsRouter)
+app.use('/api/official-submissions', officialSubmissionsRouter)
 app.use('/api/submissions', submissionsRouter)
 app.use('/api/verification', verificationRouter)
 app.use('/api/audit', auditRouter)

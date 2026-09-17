@@ -1,0 +1,5 @@
+export { default as FacilitiesPage } from './FacilitiesPage'
+export { default as FacilityDetailPage } from './FacilityDetailPage'
+export { default as FacilityReviewPage } from './FacilityReviewPage'
+export { default as FacilityReviewDetailPage } from './FacilityReviewDetailPage'
+export { default as FacilitySubmissionPage } from './FacilitySubmissionPage'

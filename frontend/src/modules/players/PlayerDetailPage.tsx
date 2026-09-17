@@ -57,17 +57,30 @@ function inputDate(value?: string | null) {
   return value ? new Date(value).toISOString().slice(0, 10) : ''
 }
 
+/** Umur dihitung otomatis dari tanggal lahir, sama seperti master pelatih & wasit. */
+function ageFrom(birthDate?: string | null) {
+  if (!birthDate) return null
+  const born = new Date(birthDate)
+  if (Number.isNaN(born.getTime())) return null
+  const today = new Date()
+  let age = today.getFullYear() - born.getFullYear()
+  const monthDiff = today.getMonth() - born.getMonth()
+  // Ulang tahun tahun ini belum lewat — kurangi satu.
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < born.getDate())) age -= 1
+  return age < 0 ? null : age
+}
+
 function personalFormFromPlayer(player: PlayerDetail): PersonalForm {
   return {
-    fullName: player.person.fullName,
-    nik: player.person.nik ?? '',
-    gender: (player.person.gender ?? '') as PersonalForm['gender'],
-    birthPlace: player.person.birthPlace ?? '',
-    birthDate: inputDate(player.person.birthDate),
-    address: player.person.address ?? '',
-    phone: player.person.phone ?? '',
-    instagram: player.person.instagram ?? '',
-    whatsapp: player.person.whatsapp ?? '',
+    fullName: player.fullName,
+    nik: player.nik ?? '',
+    gender: (player.gender ?? '') as PersonalForm['gender'],
+    birthPlace: player.birthPlace ?? '',
+    birthDate: inputDate(player.birthDate),
+    address: player.address ?? '',
+    phone: player.phone ?? '',
+    instagram: player.instagram ?? '',
+    whatsapp: player.whatsapp ?? '',
   }
 }
 
@@ -87,8 +100,13 @@ function ConfirmDialog({ title, message, confirmLabel, onConfirm, onCancel }: { 
   </div>
 }
 
-function Field({ label, value, mono = false }: { label: string; value?: string | null; mono?: boolean }) {
-  return <div><dt className={labelClass}>{label}</dt><dd className={`text-sm text-gray-800 dark:text-gray-100 ${mono ? 'font-mono' : ''}`}>{value || '—'}</dd></div>
+/** Satu baris label–nilai pada ringkasan profil di kepala halaman. */
+function HeroField({ label, value, mono = false }: { label: string; value?: string | null; mono?: boolean }) {
+  const empty = !value
+  return <div>
+    <dt className="text-xs font-medium text-gray-500">{label}</dt>
+    <dd className={`mt-1 text-sm ${mono ? 'font-mono ' : ''}${empty ? 'text-gray-400' : 'text-gray-800 dark:text-gray-100'}`}>{value || '—'}</dd>
+  </div>
 }
 
 function PersonalRow({ label, value, hint, mono = false, children }: { label: string; value?: string; hint?: string; mono?: boolean; children?: React.ReactNode }) {
@@ -192,8 +210,8 @@ export default function PlayerDetailPage() {
 
   // Identity edits (NIK / jenis kelamin) must be confirmed before the request is sent.
   const identityChanged = Boolean(player) && (
-    (personalForm.nik.trim() || '') !== (player!.person.nik ?? '') ||
-    (personalForm.gender || null) !== (player!.person.gender ?? null)
+    (personalForm.nik.trim() || '') !== (player!.nik ?? '') ||
+    (personalForm.gender || null) !== (player!.gender ?? null)
   )
 
   const submitPersonalInfo = async () => {
@@ -277,19 +295,61 @@ export default function PlayerDetailPage() {
   if (error || !player) return <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8"><Link className="text-sm font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200" to="/players">Kembali ke daftar pemain</Link><div className="mt-8 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">{error || 'Pemain tidak ditemukan.'}</div></div>
 
   const tabs: Array<[Tab, string]> = [['profile', 'Informasi pribadi'], ['ranking', 'Peringkat PNP'], ['records', 'Riwayat prestasi']]
+  const age = ageFrom(player.birthDate)
+  // Peringkat terkini diambil dari catatan PNP paling baru, bukan diketik ulang.
+  const latestRanking = rankings[0]
+  const genderLabel = player.gender === 'PUTRA' ? 'Laki-laki' : player.gender === 'PUTRI' ? 'Perempuan' : null
+
+  // Ringkasan yang paling sering dicari, sejajar dengan halaman pelatih & wasit.
+  const heroSpecs: Array<[string, string | null]> = [
+    ['Kabupaten / kota', player.district.name],
+    ['Kelompok umur', formatAgeGroup(player.ageGroup, player.gender)],
+    ['Klub', player.club?.name ?? null],
+    ['Peringkat PNP', latestRanking ? `#${latestRanking.rank}${latestRanking.period ? ` · ${latestRanking.period}` : ''}` : null],
+    ['Riwayat prestasi', `${records.length} catatan`],
+    ['NIK', player.nik ?? null],
+  ]
+
   return <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8">
     <div className="mb-6 flex items-center gap-4"><Link className="text-sm font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200" to="/players">Kembali ke daftar pemain</Link></div>
     {error && <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</div>}
     {transferMessage && <div className="mb-5 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700" role="status">{transferMessage}</div>}
-    <div className="grid gap-6 lg:grid-cols-[minmax(220px,20%)_minmax(0,80%)]">
-      <aside className="h-fit rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-700/60 dark:bg-gray-800">
-        {player.photo ? <AuthenticatedImage fileId={player.photo.id} alt={`Foto ${player.person.fullName}`} className="mb-5 h-16 w-16 rounded-lg border border-gray-200 object-cover dark:border-gray-700" /> : <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-lg bg-gray-100 text-xl font-semibold text-gray-400 dark:bg-gray-700">{player.person.fullName.slice(0, 1).toUpperCase()}</div>}
-        <h1 className="text-lg font-semibold leading-snug text-gray-900 dark:text-gray-100">{player.person.fullName}</h1><p className="mt-1 font-mono text-xs text-gray-500">{player.playerCode}</p><div className="mt-4"><StatusBadge status={player.status} /></div>
-        <dl className="mt-7 space-y-5"><Field label="Kabupaten / kota" value={player.district.name} /><Field label="Kelompok umur" value={formatAgeGroup(player.ageGroup, player.person.gender)} /><Field label="Klub" value={player.club?.name} /><Field label="NIK" value={player.person.nik} mono /></dl>
-      </aside>
-      <section className="min-w-0 rounded-lg border border-gray-200 bg-white dark:border-gray-700/60 dark:bg-gray-800">
-        <nav className="flex overflow-x-auto border-b border-gray-200 dark:border-gray-700/60" aria-label="Detail pemain">{tabs.map(([key, label]) => <button key={key} className={`whitespace-nowrap border-b-2 px-4 py-3.5 text-sm font-semibold transition sm:px-5 ${tab === key ? 'border-violet-500 text-violet-700 dark:text-violet-400' : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}`} onClick={() => setTab(key)}>{label}</button>)}</nav>
-        <div className="p-5 sm:p-7">
+
+    {/* ── Profil ringkas ───────────────────────────────────────── */}
+    <section className="mb-6 overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-700/60 dark:bg-gray-800">
+      <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,28%)_minmax(0,72%)] lg:gap-8">
+        <div>
+          {player.photo
+            ? <AuthenticatedImage fileId={player.photo.id} alt={`Foto ${player.fullName}`} className="aspect-square w-full rounded-lg border border-gray-200 object-cover dark:border-gray-700" />
+            : <div className="flex aspect-square w-full items-center justify-center rounded-lg border border-dashed border-gray-200 text-4xl font-semibold text-gray-300 dark:border-gray-700 dark:text-gray-600">{player.fullName.slice(0, 1).toUpperCase()}</div>}
+        </div>
+
+        <div className="min-w-0">
+          <p className="font-mono text-xs text-gray-400">{player.playerCode}</p>
+          <h1 className="mt-1 text-2xl font-bold leading-snug text-gray-900 dark:text-gray-100 md:text-3xl">{player.fullName}</h1>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <StatusBadge status={player.status} />
+            {player.club?.name && <span className="rounded-full bg-violet-500/10 px-2.5 py-1 text-xs font-medium text-violet-700">{player.club.name}</span>}
+          </div>
+
+          <p className="mt-4 text-sm text-gray-600 dark:text-gray-300">
+            {[genderLabel, formatDate(player.birthDate) === '—' ? null : formatDate(player.birthDate), age != null ? `${age} tahun` : null].filter(Boolean).join(' · ') || '—'}
+          </p>
+          {(player.whatsapp || player.phone || player.instagram) && <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+            {[player.whatsapp ? `WhatsApp ${player.whatsapp}` : null, player.phone, player.instagram].filter(Boolean).join(' · ')}
+          </p>}
+
+          <dl className="mt-6 grid gap-x-6 gap-y-4 border-t border-gray-100 pt-5 dark:border-gray-700/60 sm:grid-cols-3">
+            {heroSpecs.map(([label, value]) => <HeroField key={label} label={label} value={value} mono={label === 'NIK'} />)}
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    {/* ── Tab isi ──────────────────────────────────────────────── */}
+    <section className="min-w-0 rounded-xl border border-gray-200 bg-white dark:border-gray-700/60 dark:bg-gray-800">
+      <nav className="flex overflow-x-auto border-b border-gray-200 dark:border-gray-700/60" aria-label="Detail pemain">{tabs.map(([key, label]) => <button key={key} className={`whitespace-nowrap border-b-2 px-4 py-3.5 text-sm font-semibold transition sm:px-5 ${tab === key ? 'border-violet-500 text-violet-700 dark:text-violet-400' : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}`} onClick={() => setTab(key)}>{label}</button>)}</nav>
+      <div className="p-5 sm:p-7">
           {tab === 'profile' && <form onSubmit={savePersonalInfo}>
             {formError && <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">{formError}</div>}
             {personalMessage && <div className="mb-5 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700" role="status">{personalMessage}</div>}
@@ -300,7 +360,7 @@ export default function PlayerDetailPage() {
                 <PersonalRow label="Nama lengkap"><input className={`${fieldClass} sm:max-w-sm`} value={personalForm.fullName} onChange={(event) => setPersonalForm({ ...personalForm, fullName: event.target.value })} required /></PersonalRow>
                 <PersonalRow label="NIK" hint={isAdmin ? 'Dapat diubah dengan konfirmasi' : undefined}><input className={`${fieldClass} sm:max-w-[220px] font-mono`} value={personalForm.nik} inputMode="numeric" pattern="\d{16}" maxLength={16} onChange={(event) => setPersonalForm({ ...personalForm, nik: event.target.value.replace(/\D/g, '') })} /></PersonalRow>
                 <PersonalRow label="Jenis kelamin" hint="Menentukan jalur PA/PI kelompok umur"><select className={`${fieldClass} sm:max-w-[200px]`} value={personalForm.gender} onChange={(event) => setPersonalForm({ ...personalForm, gender: event.target.value as PersonalForm['gender'] })}><option value="">Belum diisi</option><option value="PUTRA">Laki-laki</option><option value="PUTRI">Perempuan</option></select></PersonalRow>
-                <PersonalRow label="Kelompok umur" value={formatAgeGroup(player.ageGroup, personalForm.gender)} hint="Otomatis dari tanggal lahir & jenis kelamin" />
+                <PersonalRow label="Kelompok umur" value={formatAgeGroup(player.ageGroup, personalForm.gender || null)} hint="Otomatis dari tanggal lahir & jenis kelamin" />
                 <PersonalRow label="Tempat lahir"><input className={fieldClass} value={personalForm.birthPlace} onChange={(event) => setPersonalForm({ ...personalForm, birthPlace: event.target.value })} /></PersonalRow>
                 <PersonalRow label="Tanggal lahir"><input className={`${fieldClass} sm:max-w-[200px]`} type="date" value={personalForm.birthDate} onChange={(event) => setPersonalForm({ ...personalForm, birthDate: event.target.value })} /></PersonalRow>
               </div>
@@ -317,14 +377,15 @@ export default function PlayerDetailPage() {
             </section>
 
             <section className="mt-8">
-              <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Registrasi olahraga</h2><p className="mt-1 text-sm text-gray-500">Afiliasi dan status keanggotaan pemain.</p></div>{isAdmin && <button type="button" className="btn border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200" onClick={openTransfer}>Transfer kabupaten</button>}</div>
-              <div className="mt-4 divide-y divide-gray-100 border-t border-gray-100 pt-1 dark:divide-gray-700/60 dark:border-gray-700/60">
-                <PersonalRow label="Kabupaten / kota" value={player.district.name} hint="Afiliasi saat ini" />
-                <PersonalRow label="Klub" value={player.club?.name} />
-                <PersonalRow label="Kode pemain" value={player.playerCode} mono />
-                <PersonalRow label="Kelompok umur" value={formatAgeGroup(player.ageGroup, personalForm.gender)} hint="Otomatis, tidak dapat diedit" />
+              {/* Kabupaten, klub, kode pemain, dan kelompok umur sengaja tidak
+                  diulang di sini — semuanya sudah tampil di ringkasan atas. */}
+              <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Registrasi olahraga</h2><p className="mt-1 text-sm text-gray-500">Afiliasi pemain saat ini: <span className="font-medium text-gray-700 dark:text-gray-200">{player.district.name}</span>. Perpindahan kabupaten perlu disetujui kabupaten tujuan.</p></div>{isAdmin && <button type="button" className="btn border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200" onClick={openTransfer}>Transfer kabupaten</button>}</div>
+              <div className="mt-4 border-t border-gray-100 pt-4 dark:border-gray-700/60">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Riwayat perpindahan</p>
+                {(player.districtHistory ?? []).length > 0
+                  ? <ul className="mt-2 space-y-2">{(player.districtHistory ?? []).map((entry) => <li key={entry.id ?? entry.changedAt} className="rounded-md border border-gray-100 px-3 py-2 text-sm text-gray-600 dark:border-gray-700/60 dark:text-gray-300">{entry.fromDistrict?.name ?? '—'} → {entry.toDistrict?.name ?? player.district.name}<span className="ml-2 text-xs text-gray-400">{formatDate(entry.changedAt)}</span></li>)}</ul>
+                  : <p className="mt-2 text-sm text-gray-500">Belum pernah berpindah kabupaten.</p>}
               </div>
-              {(player.districtHistory ?? []).length > 0 && <div className="mt-5"><p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Riwayat perpindahan</p><ul className="mt-2 space-y-2">{(player.districtHistory ?? []).map((entry) => <li key={entry.id ?? entry.changedAt} className="rounded-md border border-gray-100 px-3 py-2 text-sm text-gray-600 dark:border-gray-700/60 dark:text-gray-300">{entry.fromDistrict?.name ?? '—'} → {entry.toDistrict?.name ?? player.district.name}<span className="ml-2 text-xs text-gray-400">{formatDate(entry.changedAt)}</span></li>)}</ul></div>}
             </section>
 
             <div className="mt-7 flex justify-end border-t border-gray-100 pt-5 dark:border-gray-700/60"><button type="submit" className="btn bg-gray-900 text-sm text-gray-100 hover:bg-gray-800 disabled:opacity-50 dark:bg-gray-100 dark:text-gray-800" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan informasi'}</button></div>
@@ -332,8 +393,7 @@ export default function PlayerDetailPage() {
           {tab === 'ranking' && <div><TabHeader title="Peringkat PNP" description="Riwayat peringkat pemain berdasarkan periode pencatatan." count={rankings.length} actionLabel="Tambah peringkat" onAdd={() => openRanking()} /><TableFrame><table className="w-full min-w-[560px] text-left text-sm"><TableHead labels={['Peringkat', 'Periode', 'Terakhir diperbarui', 'Aksi']} /><tbody className="divide-y divide-gray-100 dark:divide-gray-700/60">{rankings.map((item) => <tr key={item.id ?? `${item.period}-${item.rank}`}><td className="px-4 py-3.5 font-semibold text-gray-800 dark:text-gray-100">#{item.rank}</td><td className="px-4 py-3.5 text-gray-600 dark:text-gray-300">{item.period}</td><td className="px-4 py-3.5 text-gray-500">{formatDate(item.updatedAt)}</td><RowActions onEdit={() => openRanking(item)} onDelete={() => remove('ranking', item.id)} /></tr>)}{!rankings.length && <EmptyTable message="Belum ada riwayat peringkat." colSpan={4} />}</tbody></table></TableFrame></div>}
           {tab === 'records' && <div><TabHeader title="Riwayat prestasi" description="Prestasi, kompetisi, dan kegiatan pembinaan yang pernah diikuti pemain." count={records.length} actionLabel="Tambah prestasi" onAdd={() => openRecord()} /><TableFrame><table className="w-full min-w-[720px] text-left text-sm"><TableHead labels={['Prestasi / kegiatan', 'Kategori', 'Capaian', 'Tanggal', 'Bukti sertifikat', 'Aksi']} /><tbody className="divide-y divide-gray-100 dark:divide-gray-700/60">{records.map((item) => <tr key={item.id ?? item.title}><td className="px-4 py-3.5"><p className="font-medium text-gray-800 dark:text-gray-100">{item.title}</p></td><td className="px-4 py-3.5 text-gray-600 dark:text-gray-300">{categoryLabels[item.category ?? ''] ?? item.category ?? '—'}</td><td className="px-4 py-3.5 text-gray-600 dark:text-gray-300">{resultLabels[item.result ?? ''] ?? item.result ?? '—'}</td><td className="px-4 py-3.5 text-gray-500">{formatDate(item.eventDate)}</td><td className="px-4 py-3.5 text-gray-500">{(player.certificates ?? []).filter((certificate) => certificate.trackRecordId === item.id).length || '—'}</td><RowActions onEdit={() => openRecord(item)} onDelete={() => remove('record', item.id)} /></tr>)}{!records.length && <EmptyTable message="Belum ada riwayat prestasi." colSpan={6} />}</tbody></table></TableFrame></div>}
                   </div>
-      </section>
-    </div>
+    </section>
 
     {confirmSave && <ConfirmDialog title="Konfirmasi perubahan data identitas" message="NIK atau jenis kelamin akan berubah. Perubahan ini tercatat pada log audit dan dapat mengubah kelompok umur pemain. Lanjutkan?" confirmLabel="Ya, ubah identitas" onCancel={() => setConfirmSave(false)} onConfirm={submitPersonalInfo} />}
 

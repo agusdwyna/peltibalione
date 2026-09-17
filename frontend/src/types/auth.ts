@@ -23,6 +23,6 @@ export const districtSchema = z.object({
   id: z.string(),
   code: z.string(),
   name: z.string(),
-  _count: z.object({ players: z.number().optional(), admins: z.number().optional() }).optional(),
+  _count: z.object({ players: z.number().optional(), admins: z.number().optional(), facilities: z.number().optional(), coaches: z.number().optional(), referees: z.number().optional() }).optional(),
 })
 export type District = z.infer<typeof districtSchema>

@@ -79,3 +79,7 @@ export type CreateTrackRecordInput = z.infer<typeof createTrackRecordSchema>
 export type UpdateTrackRecordInput = z.infer<typeof updateTrackRecordSchema>
 export type CreateCertificateInput = z.infer<typeof createCertificateSchema>
 export type UpdateCertificateInput = z.infer<typeof updateCertificateSchema>
+
+export const updatePlayerStatusSchema = z.object({
+  status: z.enum(['VERIFIED', 'ACTIVE', 'INACTIVE']),
+}).strict()

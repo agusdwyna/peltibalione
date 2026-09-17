@@ -63,7 +63,7 @@ submissionsRouter.get('/', authorize({ roles: ['DISTRICT_ADMIN', 'CENTRAL_ADMIN'
     const where = { form: { districtId: scopeDistrictId }, status: { in: ['SUBMITTED', 'UNDER_REVIEW'] as SubmissionStatus[] }, ...(search ? { fullName: { contains: search, mode: 'insensitive' as const } } : {}) }
 
     const [data, total] = await Promise.all([
-      prisma.formSubmission.findMany({
+      prisma.playerSubmission.findMany({
         where,
         ...paginationArgs({ page, pageSize }),
         orderBy: { createdAt: 'desc' },
@@ -79,7 +79,7 @@ submissionsRouter.get('/', authorize({ roles: ['DISTRICT_ADMIN', 'CENTRAL_ADMIN'
           form: { select: { title: true, district: { select: { name: true } } } },
         },
       }),
-      prisma.formSubmission.count({ where }),
+      prisma.playerSubmission.count({ where }),
     ])
 
     // Pending affiliation transfers are reviewed in the same queue, so they are
@@ -129,7 +129,7 @@ submissionsRouter.get('/:id', authorize({ roles: ['DISTRICT_ADMIN', 'CENTRAL_ADM
     const districtId = central ? requestedDistrictId : jwtDistrictId
     if (!districtId) return res.status(400).json({ error: { code: 'DISTRICT_CONTEXT_REQUIRED', message: 'Pilih workspace distrik terlebih dahulu' } })
     if (!central && requestedDistrictId && requestedDistrictId !== jwtDistrictId) return res.status(403).json({ error: { code: 'OUT_OF_DISTRICT_SCOPE', message: 'Out of district scope' } })
-    const submission = await prisma.formSubmission.findUnique({
+    const submission = await prisma.playerSubmission.findUnique({
       where: { id: String(req.params.id) },
       include: { form: { include: { district: { select: { name: true, code: true } } } }, files: { select: { id: true, entityType: true, originalName: true, mimeType: true, size: true } } },
     })

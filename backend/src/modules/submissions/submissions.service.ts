@@ -16,37 +16,28 @@ export async function detectDuplicate(input: {
   fullName: string
   birthDate?: Date
 }): Promise<{ match: 'NO_MATCH' | 'POSSIBLE_MATCH' | 'EXACT_MATCH'; playerId?: string }> {
-  const personBirthDay = input.birthDate?.toISOString().slice(0, 10)
+  const birthDay = input.birthDate?.toISOString().slice(0, 10)
 
   if (input.nik) {
-    const person = await prisma.person.findUnique({
-      where: { nik: input.nik },
-      include: { player: true },
-    })
-    if (person?.player) {
-      return { match: 'EXACT_MATCH', playerId: person.player.id }
-    }
-    if (person) {
-      return { match: 'POSSIBLE_MATCH' }
-    }
+    const player = await prisma.player.findUnique({ where: { nik: input.nik } })
+    if (player) return { match: 'EXACT_MATCH', playerId: player.id }
   }
 
   // Nama + Tanggal Lahir
-  if (personBirthDay) {
+  if (birthDay) {
     const start = new Date(input.birthDate!)
     start.setHours(0, 0, 0, 0)
     const end = new Date(input.birthDate!)
     end.setHours(23, 59, 59, 999)
 
-    const candidate = await prisma.person.findFirst({
+    const candidate = await prisma.player.findFirst({
       where: {
         fullName: { equals: input.fullName, mode: 'insensitive' },
         birthDate: { gte: start, lte: end },
       },
-      include: { player: true },
     })
-    if (candidate?.player) {
-      return { match: 'POSSIBLE_MATCH', playerId: candidate.player.id }
+    if (candidate) {
+      return { match: 'POSSIBLE_MATCH', playerId: candidate.id }
     }
   }
 
@@ -67,7 +58,7 @@ async function createSubmissionForForm(
   // never a manually selected KU value.
   const resolvedAgeGroup = await resolveAgeGroup(input.birthDate, null, input.gender)
 
-  const submission = await prisma.formSubmission.create({
+  const submission = await prisma.playerSubmission.create({
     data: {
       formId,
       status: 'SUBMITTED',
@@ -138,7 +129,7 @@ export async function createSubmissionInDistrict(
 
 /**
  * PRD §17 — review links a submission to a Player (CREATE) or rejects it.
- * Creates Person + Player master records on LINK.
+ * Creates a Player master record on LINK.
  */
 export async function reviewSubmission(
   submissionId: string,
@@ -146,7 +137,7 @@ export async function reviewSubmission(
   reviewerId: string,
   districtId: string,
 ) {
-  const submission = await prisma.formSubmission.findUnique({
+  const submission = await prisma.playerSubmission.findUnique({
     where: { id: submissionId },
     include: { form: true },
   })
@@ -157,7 +148,7 @@ export async function reviewSubmission(
   }
 
   if (input.action === 'REJECT') {
-    const updated = await prisma.formSubmission.update({
+    const updated = await prisma.playerSubmission.update({
       where: { id: submissionId },
       data: {
         status: 'REJECTED',
@@ -180,36 +171,8 @@ export async function reviewSubmission(
 
   // LINK → create Player master record
   return prisma.$transaction(async (tx) => {
-    // Upsert Person keyed by NIK (if provided) or create fresh
-    let person = submission.nik
-      ? await tx.person.findUnique({ where: { nik: submission.nik! } })
-      : null
-
-    if (!person) {
-      person = await tx.person.create({
-        data: {
-          fullName: submission.fullName,
-          birthPlace: submission.birthPlace,
-          birthDate: submission.birthDate,
-          gender: submission.gender,
-          nik: submission.nik,
-          address: submission.address,
-          phone: submission.phone,
-          instagram: submission.instagram,
-          whatsapp: submission.whatsapp,
-        },
-      })
-    } else {
-      person = await tx.person.update({
-        where: { id: person.id },
-        data: {
-          gender: submission.gender ?? person.gender,
-          address: submission.address ?? person.address,
-          phone: submission.phone ?? person.phone,
-          instagram: submission.instagram ?? person.instagram,
-          whatsapp: submission.whatsapp ?? person.whatsapp,
-        },
-      })
+    if (submission.nik && await tx.player.findUnique({ where: { nik: submission.nik } })) {
+      throw AppError.conflict('DUPLICATE_PLAYER', 'NIK sudah terdaftar sebagai pemain')
     }
 
     // Resolve club (optional). If a clubId was given, use it; else optionally create from clubName.
@@ -254,7 +217,15 @@ export async function reviewSubmission(
       data: {
         playerCode,
         status: 'VERIFIED', // langsung VERIFIED — tidak perlu verification request
-        personId: person.id,
+        fullName: submission.fullName,
+        birthPlace: submission.birthPlace,
+        birthDate: submission.birthDate,
+        gender: submission.gender,
+        nik: submission.nik,
+        address: submission.address,
+        phone: submission.phone,
+        instagram: submission.instagram,
+        whatsapp: submission.whatsapp,
         districtId: submission.form.districtId,
         clubId,
         ageGroup: ageGroup?.code ?? submission.ageGroup ?? null,
@@ -343,7 +314,7 @@ export async function reviewSubmission(
       },
     })
 
-    const updated = await tx.formSubmission.update({
+    const updated = await tx.playerSubmission.update({
       where: { id: submissionId },
       data: {
         status: 'CREATED',

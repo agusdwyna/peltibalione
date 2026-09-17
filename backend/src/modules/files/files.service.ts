@@ -44,3 +44,22 @@ export async function persistFile(input: PersistFileInput) {
 
   return file
 }
+
+/**
+ * Hapus berkas dari disk sekaligus barisnya di DB. Berkas yang sudah hilang
+ * dari disk tidak dianggap galat — baris DB tetap harus ikut bersih.
+ */
+export async function deleteStoredFile(fileId: string) {
+  const file = await prisma.file.findUnique({ where: { id: fileId } })
+  if (!file) return null
+
+  const dir = path.resolve(env.UPLOAD_DIR)
+  const absolute = path.resolve(dir, file.storageKey)
+  // Jangan pernah menghapus di luar direktori upload lewat storageKey yang dibuat-buat.
+  if (absolute.startsWith(dir)) {
+    await fs.rm(absolute, { force: true })
+  }
+
+  await prisma.file.delete({ where: { id: fileId } })
+  return file
+}
