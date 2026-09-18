@@ -14,7 +14,7 @@ export type Gender = z.infer<typeof genderSchema>
 
 export const playerSchema = z.object({
   id: z.string(), playerCode: z.string(), status: z.string(), ageGroup: z.string().nullable().optional(),
-  person: z.object({ fullName: z.string(), nik: z.string().nullable().optional(), gender: genderSchema.nullable().optional() }),
+  fullName: z.string(), nik: z.string().nullable().optional(), gender: genderSchema.nullable().optional(),
   district: z.object({ name: z.string(), code: z.string() }),
   club: z.object({ name: z.string() }).nullable().optional(),
 })
@@ -46,11 +46,9 @@ export type Certificate = z.infer<typeof certificateSchema>
 export const playerDetailSchema = z.object({
   id: z.string(), playerCode: z.string(), status: z.string(), ageGroup: z.string().nullable().optional(),
   createdAt: z.string().optional(), updatedAt: z.string().optional(),
-  person: z.object({
-    fullName: z.string(), nik: z.string().nullable().optional(), gender: genderSchema.nullable().optional(), birthPlace: z.string().nullable().optional(),
-    birthDate: z.string().nullable().optional(), address: z.string().nullable().optional(), phone: z.string().nullable().optional(),
-    instagram: z.string().nullable().optional(), whatsapp: z.string().nullable().optional(),
-  }),
+  fullName: z.string(), nik: z.string().nullable().optional(), gender: genderSchema.nullable().optional(), birthPlace: z.string().nullable().optional(),
+  birthDate: z.string().nullable().optional(), address: z.string().nullable().optional(), phone: z.string().nullable().optional(),
+  instagram: z.string().nullable().optional(), whatsapp: z.string().nullable().optional(),
   district: z.object({ id: z.string().optional(), name: z.string(), code: z.string() }),
   club: z.object({ name: z.string(), districtId: z.string().nullable().optional() }).nullable().optional(),
   photo: z.object({ id: z.string(), originalName: z.string(), mimeType: z.string(), size: z.number() }).nullable().optional(),
@@ -79,8 +77,17 @@ export const updatePlayerPersonalInfoSchema = z.object({
 })
 export type UpdatePlayerPersonalInfoInput = z.infer<typeof updatePlayerPersonalInfoSchema>
 
+export const formTypeSchema = z.enum([
+  'PLAYER_REGISTRATION',
+  'FACILITY_REGISTRATION',
+  'COACH_REGISTRATION',
+  'OFFICIAL_REGISTRATION',
+])
+export type FormType = z.infer<typeof formTypeSchema>
+
 export const formSchema = z.object({
   id: z.string(), title: z.string(), description: z.string().nullable().optional(), publicToken: z.string(), status: z.string(),
+  type: formTypeSchema.optional(),
   district: z.object({ name: z.string(), code: z.string() }).optional(),
   owner: z.object({ name: z.string(), email: z.string() }).optional(),
   _count: z.object({ submissions: z.number() }).optional(),
@@ -125,7 +132,7 @@ export type PublicDistrictOverview = z.infer<typeof publicDistrictOverviewSchema
 
 export const checkStatusResultSchema = z.object({
   submissionId: z.string(), fullName: z.string(), submissionStatus: z.string(),
-  playerStatus: z.string().nullable(), playerId: z.string().nullable(), personId: z.string().nullable(),
+  playerStatus: z.string().nullable(), playerId: z.string().nullable(),
   playerCode: z.string().nullable(), district: z.object({ name: z.string(), code: z.string() }).nullable(),
   rejectionReason: z.string().optional(), createdAt: z.string(),
 })

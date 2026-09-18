@@ -18,6 +18,25 @@ const iconPaths: Record<NavigationItem['icon'], string> = {
   verification: 'M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm3.2 5.7-3.8 4a1 1 0 0 1-1.5 0L4.8 9.6l1.4-1.4 1.2 1.1 3.1-3.2 1.4 1.4Z',
   users: 'M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-5 7a5 5 0 0 1 10 0H3Zm10-8h3v2h-3V7Zm0 3h3v2h-3v-2Z',
   audit: 'M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm1 3v4.6l3 1.7-1 1.7-4-2.3V4h2Z',
+  facilities: 'M1 2h14v12H1V2Zm2 2v8h10V4H3Zm4 0h2v8H7V4ZM3 6h2v4H3V6Zm8 0h2v4h-2V6Z',
+  // Peluit pelatih — lingkaran badan + corong ke kanan.
+  coaches: 'M6 4a5 5 0 1 0 0 10 5 5 0 0 0 0-10Zm0 2.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5ZM10.6 6h4.9a.5.5 0 0 1 0 1h-4.4a5.9 5.9 0 0 0-.5-1ZM11 2h3v2h-3V2Z',
+  // Kursi wasit — tiang dengan sandaran dan kaki melebar.
+  officials: 'M4 1h8v2H4V1Zm0 3h8v4H4V4Zm2 5h4l1.6 6h-2.1L9 11H7l-.5 4h-2.1L6 9Z',
+}
+
+/**
+ * Halaman review adalah sub-halaman masternya (`/facilities/review`), jadi
+ * kecocokan awalan sengaja dipertahankan agar menu induknya tetap menyala.
+ * Bila lebih dari satu menu cocok, item terpanjang yang menang.
+ */
+function matchesPath(pathname: string, to: string) {
+  return to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(`${to}/`)
+}
+
+/** Termasuk rute lain yang diklaim menu ini (mis. /verification milik Pemain). */
+function matchesItem(pathname: string, item: NavigationItem) {
+  return matchesPath(pathname, item.to) || (item.alsoMatches ?? []).some((path) => matchesPath(pathname, path))
 }
 
 function SidebarIcon({ item, active }: { item: NavigationItem; active: boolean }) {
@@ -31,6 +50,9 @@ function Sidebar({ sidebarOpen, setSidebarOpen, variant = 'default' }: SidebarPr
   const isAllRegions = useWorkspaceStore((state) => state.isAllRegions)
   const userRoles = user?.roles.map((role) => role.role) ?? []
   const visibleItems = navigationItems.filter((item) => !item.roles || item.roles.some((role) => userRoles.includes(role)))
+  const activePath = visibleItems
+    .filter((item) => matchesItem(pathname, item))
+    .sort((a, b) => b.to.length - a.to.length)[0]?.to
   const trigger = useRef<HTMLButtonElement>(null)
   const sidebar = useRef<HTMLDivElement>(null)
   const storedSidebarExpanded = localStorage.getItem('sidebar-expanded')
@@ -72,7 +94,7 @@ function Sidebar({ sidebarOpen, setSidebarOpen, variant = 'default' }: SidebarPr
           {(workspace || isAllRegions) && <div className="mb-7 rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-gray-700/60 dark:bg-gray-800"><p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Workspace</p><p className="mt-1 truncate text-sm font-semibold text-gray-800 dark:text-gray-100">{isAllRegions ? 'Semua Wilayah' : workspace?.name}</p><Link className="mt-1 inline-block text-xs font-medium text-violet-600 hover:text-violet-700" to="/">Switch workspace</Link></div>}
           {navigationGroups.map((group) => {
             const items = visibleItems.filter((item) => item.group === group)
-            return <div key={group}><h3 className="text-xs uppercase text-gray-400 dark:text-gray-500 font-semibold pl-3"><span className="hidden lg:block lg:sidebar-expanded:hidden 2xl:hidden text-center w-6" aria-hidden="true">•••</span><span className="lg:hidden lg:sidebar-expanded:block 2xl:block">{group}</span></h3><ul className="mt-3">{items.map((item) => { const active = item.to === '/' ? pathname === '/' : pathname.startsWith(item.to); return <li key={item.to} className={`pl-4 pr-3 py-2 rounded-lg mb-0.5 last:mb-0 bg-linear-to-r ${active ? 'from-violet-500/[0.12] dark:from-violet-500/[0.24] to-violet-500/[0.04]' : ''}`}><NavLink end={item.to === '/'} to={item.to} onClick={() => setSidebarOpen(false)} className={`block truncate transition duration-150 ${active ? 'text-gray-800 dark:text-gray-100' : 'text-gray-800 dark:text-gray-100 hover:text-gray-900 dark:hover:text-white'}`}><div className="flex items-center"><SidebarIcon item={item} active={active} /><span className="text-sm font-medium ml-4 lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">{item.label}</span></div></NavLink></li> })}</ul></div>
+            return <div key={group}><h3 className="text-xs uppercase text-gray-400 dark:text-gray-500 font-semibold pl-3"><span className="hidden lg:block lg:sidebar-expanded:hidden 2xl:hidden text-center w-6" aria-hidden="true">•••</span><span className="lg:hidden lg:sidebar-expanded:block 2xl:block">{group}</span></h3><ul className="mt-3">{items.map((item) => { const active = activePath === item.to; return <li key={item.to} className={`pl-4 pr-3 py-2 rounded-lg mb-0.5 last:mb-0 bg-linear-to-r ${active ? 'from-violet-500/[0.12] dark:from-violet-500/[0.24] to-violet-500/[0.04]' : ''}`}><NavLink end={item.to === '/'} to={item.to} onClick={() => setSidebarOpen(false)} className={`block truncate transition duration-150 ${active ? 'text-gray-800 dark:text-gray-100' : 'text-gray-800 dark:text-gray-100 hover:text-gray-900 dark:hover:text-white'}`}><div className="flex items-center"><SidebarIcon item={item} active={active} /><span className="text-sm font-medium ml-4 lg:opacity-0 lg:sidebar-expanded:opacity-100 2xl:opacity-100 duration-200">{item.label}</span></div></NavLink></li> })}</ul></div>
           })}
         </div>
 

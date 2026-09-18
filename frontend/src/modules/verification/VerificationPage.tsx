@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../../lib/api'
 import { useAuthStore } from '../../stores/auth.store'
 import PortalPagination from '../../components/portal/PortalPagination'
@@ -64,6 +64,9 @@ export default function VerificationPage() {
     <div className="px-4 py-8 sm:px-6 lg:px-8 w-full max-w-9xl mx-auto">
       <div className="sm:flex sm:justify-between sm:items-center mb-8">
         <div>
+          <Link className="mb-4 inline-block text-sm text-gray-500 hover:text-gray-800 dark:hover:text-gray-200" to="/players">
+            ← Kembali ke daftar pemain
+          </Link>
           <h1 className="text-2xl md:text-3xl text-gray-800 dark:text-gray-100 font-bold">Review Pendaftaran</h1>
           <p className="mt-2 text-sm text-gray-500">Setujui atau tolak pengajuan pemain baru. Yang disetujui langsung menjadi pemain terverifikasi.</p>
         </div>

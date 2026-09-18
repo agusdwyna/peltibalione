@@ -46,8 +46,8 @@ statsRouter.get(
           prisma.player.count({ where: { ...districtWhere, status: 'VERIFIED' } }),
           prisma.player.count({ where: { ...districtWhere, status: 'PENDING_VERIFICATION' } }),
           prisma.registrationForm.count({ where: { ...districtWhere, status: 'ACTIVE' } }),
-          prisma.formSubmission.count({ where: submissionWhere }),
-          prisma.formSubmission.count({
+          prisma.playerSubmission.count({ where: submissionWhere }),
+          prisma.playerSubmission.count({
             where: { ...submissionWhere, status: { in: ['SUBMITTED', 'UNDER_REVIEW'] } },
           }),
           prisma.club.count({ where: filterDistrict ? { districtId: filterDistrict } : {} }),

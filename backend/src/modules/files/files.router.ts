@@ -28,6 +28,57 @@ const publicUploadLimiter = rateLimit({
 
 export const filesRouter = Router()
 
+/**
+ * Jenis entity ditentukan server dari `kind`, bukan diterima mentah, supaya
+ * pengunggah tidak bisa menyamarkan berkas sebagai tipe lain saat diklaim.
+ */
+function publicUploadEntityType(kind: unknown): string {
+  if (kind === 'achievement') return 'SUBMISSION_ACHIEVEMENT'
+  if (kind === 'facility') return 'FACILITY_SUBMISSION_PHOTO'
+  if (kind === 'amenity') return 'FACILITY_AMENITY_PHOTO'
+  if (kind === 'coach') return 'COACH_SUBMISSION_PHOTO'
+  if (kind === 'coach-certificate') return 'COACH_CERTIFICATE'
+  if (kind === 'official') return 'OFFICIAL_SUBMISSION_PHOTO'
+  if (kind === 'official-certificate') return 'OFFICIAL_CERTIFICATE'
+  return 'SUBMISSION_PHOTO'
+}
+
+/**
+ * Berkas sertifikat pelatih (§7) & wasit (§6) boleh berupa PDF selain gambar.
+ * Hanya `kind` ini yang dilonggarkan; kolom foto tetap gambar saja.
+ */
+function allowsPdf(kind: unknown): boolean {
+  return kind === 'coach-certificate' || kind === 'official-certificate'
+}
+
+/**
+ * Validasi tipe berkas: MIME harus ada di allowlist DAN isi berkas harus cocok
+ * dengan MIME yang diklaim, supaya .exe yang diganti nama tidak lolos.
+ * Mengembalikan ekstensi aman yang diturunkan dari MIME, bukan dari nama file.
+ */
+function assertUploadType(mimeType: string, buffer: Buffer, pdfAllowed: boolean): string {
+  const allowedMimes = pdfAllowed ? ['image/jpeg', 'image/png', 'application/pdf'] : ['image/jpeg', 'image/png']
+  if (!allowedMimes.includes(mimeType)) {
+    throw AppError.badRequest('INVALID_TYPE', pdfAllowed
+      ? 'Only PDF, JPEG and PNG files are allowed'
+      : 'Only JPEG and PNG files are allowed')
+  }
+
+  const isJpeg = mimeType === 'image/jpeg' && buffer.length >= 3
+    && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff
+  const isPng = mimeType === 'image/png' && buffer.length >= 8
+    && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47
+  // %PDF
+  const isPdf = mimeType === 'application/pdf' && buffer.length >= 5
+    && buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46
+
+  if (!isJpeg && !isPng && !isPdf) {
+    throw AppError.badRequest('INVALID_CONTENT', 'File content does not match the declared type')
+  }
+
+  return mimeType === 'image/jpeg' ? '.jpg' : mimeType === 'image/png' ? '.png' : '.pdf'
+}
+
 // Public photo upload (no auth) — used by the public registration form (foto diri / foto prestasi)
 filesRouter.post('/public/upload', publicUploadLimiter, upload.single('file'), async (req, res, next) => {
   try {
@@ -35,16 +86,7 @@ filesRouter.post('/public/upload', publicUploadLimiter, upload.single('file'), a
       throw AppError.badRequest('NO_FILE', 'No file uploaded')
     }
     const { mimetype, originalname, size, buffer } = req.file
-    const allowedMimes = ['image/jpeg', 'image/png']
-    if (!allowedMimes.includes(mimetype)) {
-      throw AppError.badRequest('INVALID_TYPE', 'Only JPEG and PNG files are allowed')
-    }
-    const ext = mimetype === 'image/jpeg' ? '.jpg' : '.png'
-    const isJpeg = mimetype === 'image/jpeg' && buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff
-    const isPng = mimetype === 'image/png' && buffer.length >= 8 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47
-    if (!isJpeg && !isPng) {
-      throw AppError.badRequest('INVALID_CONTENT', 'File content does not match the declared image type')
-    }
+    const ext = assertUploadType(mimetype, buffer, allowsPdf(req.body.kind))
     const safeName = `${randomUUID()}${ext}`
     const file = await persistFile({
       buffer,
@@ -53,7 +95,7 @@ filesRouter.post('/public/upload', publicUploadLimiter, upload.single('file'), a
       mimeType: mimetype,
       size,
       uploadedBy: req.auth?.userId,
-      entityType: req.body.kind === 'achievement' ? 'SUBMISSION_ACHIEVEMENT' : 'SUBMISSION_PHOTO',
+      entityType: publicUploadEntityType(req.body.kind),
     })
     res.status(201).json({ data: { id: file.id } })
   } catch (err) {
@@ -92,31 +134,17 @@ filesRouter.post('/upload', upload.single('file'), async (req, res, next) => {
     }
 
     const { mimetype, originalname, size, buffer } = req.file
+    const kind = req.body?.kind
 
-    // 1. MIME type allowlist
-    const allowedMimes = ['image/jpeg', 'image/png']
-    if (!allowedMimes.includes(mimetype)) {
-      throw AppError.badRequest('INVALID_TYPE', 'Only JPEG and PNG files are allowed')
-    }
-
-    // 2. Extension allowlist (derived from the asserted MIME type, not the client filename)
-    const ext = mimetype === 'image/jpeg' ? '.jpg' : '.png'
+    // 1–3. MIME allowlist + content sniffing; ekstensi diturunkan dari MIME,
+    // bukan dari nama berkas yang dikirim klien.
+    const ext = assertUploadType(mimetype, buffer, allowsPdf(kind))
     const safeName = `${randomUUID()}${ext}`
 
-    // 3. Content sniffing — verify magic bytes so a renamed .exe can't masquerade as an image
-    const isJpeg = mimetype === 'image/jpeg' && buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff
-    const isPng =
-      mimetype === 'image/png' &&
-      buffer.length >= 8 &&
-      buffer[0] === 0x89 &&
-      buffer[1] === 0x50 &&
-      buffer[2] === 0x4e &&
-      buffer[3] === 0x47
-    if (!isJpeg && !isPng) {
-      throw AppError.badRequest('INVALID_CONTENT', 'File content does not match the declared image type')
-    }
-
-    // 4. Persist — write buffer to disk and record metadata (PRD §46)
+    // 4. Persist — write buffer to disk and record metadata (PRD §46).
+    // `kind` hanya menandai peruntukan berkas; tipe akhirnya tetap ditentukan
+    // server agar tidak bisa disamarkan oleh pengunggah.
+    const typedKinds = ['facility', 'amenity', 'coach', 'coach-certificate', 'official', 'official-certificate']
     const file = await persistFile({
       buffer,
       filename: safeName,
@@ -124,6 +152,7 @@ filesRouter.post('/upload', upload.single('file'), async (req, res, next) => {
       mimeType: mimetype,
       size,
       uploadedBy: req.auth?.userId,
+      entityType: typedKinds.includes(kind) ? publicUploadEntityType(kind) : undefined,
     })
 
     res.status(201).json({

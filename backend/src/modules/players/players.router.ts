@@ -21,6 +21,7 @@ import {
   updateCertificate,
   updateTrackRecord,
   updatePersonalInfo,
+  updatePlayerStatus,
   requestTransfer,
 } from './players.service'
 import {
@@ -33,6 +34,7 @@ import {
   updateCertificateSchema,
   updateTrackRecordSchema,
   updatePersonalInfoSchema,
+  updatePlayerStatusSchema,
   transferPlayerSchema,
 } from './players.schema'
 
@@ -59,7 +61,7 @@ playersRouter.get('/', authorize({ roles: ['CENTRAL_ADMIN', 'DISTRICT_ADMIN'] })
     const where: Prisma.PlayerWhereInput = {
       ...scopeWhere,
       status: officialStatuses,
-      ...(search || gender ? { person: { ...(search ? { fullName: { contains: search, mode: 'insensitive' as const } } : {}), ...(gender ? { gender } : {}) } } : {}),
+      ...(search || gender ? { ...(search ? { fullName: { contains: search, mode: 'insensitive' as const } } : {}), ...(gender ? { gender } : {}) } : {}),
       ...(ageGroup ? { ageGroup } : {}),
     }
 
@@ -69,7 +71,6 @@ playersRouter.get('/', authorize({ roles: ['CENTRAL_ADMIN', 'DISTRICT_ADMIN'] })
         ...paginationArgs({ page, pageSize }),
         orderBy: { createdAt: 'desc' },
         include: {
-          person: { select: { fullName: true, nik: true, gender: true, birthDate: true } },
           district: { select: { name: true, code: true } },
           club: { select: { name: true } },
         },
@@ -78,7 +79,7 @@ playersRouter.get('/', authorize({ roles: ['CENTRAL_ADMIN', 'DISTRICT_ADMIN'] })
     ])
 
     const synced = await Promise.all(data.map(async (player) => {
-      const resolved = await resolveAgeGroup(player.person.birthDate, player.ageGroup, player.person.gender)
+      const resolved = await resolveAgeGroup(player.birthDate, player.ageGroup, player.gender)
       const nextAgeGroupId = resolved?.id ?? null
       const nextAgeGroup = resolved?.code ?? null
       if (player.ageGroupId !== nextAgeGroupId || player.ageGroup !== nextAgeGroup) {
@@ -213,6 +214,14 @@ playersRouter.patch('/:id/certificates/:childId', playerReadAndMutationRoles, va
 playersRouter.delete('/:id/certificates/:childId', playerReadAndMutationRoles, validate(playerChildParamsSchema, 'params'), async (req, res, next) => {
   try {
     res.json({ data: await deleteCertificate(String(req.params.id), String(req.params.childId), req) })
+  } catch (err) {
+    next(err)
+  }
+})
+
+playersRouter.patch('/:id/status', authorize({ roles: ['CENTRAL_ADMIN', 'DISTRICT_ADMIN'] }), validate(playerIdSchema, 'params'), validate(updatePlayerStatusSchema), async (req, res, next) => {
+  try {
+    res.json({ data: await updatePlayerStatus(String(req.params.id), req.body.status, req) })
   } catch (err) {
     next(err)
   }

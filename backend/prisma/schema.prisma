@@ -53,6 +53,9 @@ model AgeGroup {
 
 enum FormType {
   PLAYER_REGISTRATION
+  FACILITY_REGISTRATION
+  COACH_REGISTRATION
+  OFFICIAL_REGISTRATION
 }
 
 enum FormStatus {
@@ -88,6 +91,175 @@ enum VerificationLevel {
 }
 
 // ─────────────────────────────────────────────
+// Sarana & Prasarana Lapangan Tenis
+// Reference: docs "Master Data Sarana & Prasarana Lapangan Tenis"
+// ─────────────────────────────────────────────
+
+// §2 Jenis Lapangan
+enum FacilityCourtType {
+  OUTDOOR
+  INDOOR
+  SEMI_INDOOR
+}
+
+// §2 Jenis Permukaan
+enum FacilitySurface {
+  HARD_COURT
+  CLAY
+  GRASS
+  SYNTHETIC
+}
+
+// §2 Kondisi Permukaan
+enum FacilitySurfaceCondition {
+  BAIK
+  CUKUP
+  PERLU_PERBAIKAN
+}
+
+// §2 Kondisi Net
+enum FacilityNetCondition {
+  BAIK
+  CUKUP
+  RUSAK
+}
+
+// §6 Status Lapangan
+enum FacilityOperationalStatus {
+  AKTIF
+  RENOVASI
+  TIDAK_AKTIF
+}
+
+// §6 Akses Lapangan
+enum FacilityAccess {
+  UMUM
+  ANGGOTA
+  KHUSUS
+}
+
+// §7 Status Verifikasi — diisi admin, bukan pengisi form
+enum FacilityVerificationStatus {
+  MENUNGGU
+  TERVERIFIKASI
+  DITOLAK
+}
+
+// §7 Grade Lapangan
+enum FacilityGrade {
+  A
+  B
+  C
+}
+
+enum FacilitySubmissionStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  CREATED
+  REJECTED
+}
+
+// ─────────────────────────────────────────────
+// Master Data Pelatih Tenis
+// Reference: docs "PRD – Master Data Pelatih Tenis PELTI Bali"
+// ─────────────────────────────────────────────
+
+// §5 Jenis Kelamin — pelatih memakai istilah umum, bukan PUTRA/PUTRI yang
+// dipakai kategori pertandingan atlet.
+enum CoachGender {
+  LAKI_LAKI
+  PEREMPUAN
+}
+
+// §6 Status Pelatih
+enum CoachStatus {
+  AKTIF
+  TIDAK_AKTIF
+}
+
+// §6 Kategori Atlet yang Dilatih — multi select
+enum CoachAthleteCategory {
+  JUNIOR
+  SENIOR
+  SEMUA_UMUR
+}
+
+// §6 Spesialisasi Pelatih — multi select; LAINNYA wajib disertai keterangan
+enum CoachSpecialization {
+  TEKNIK
+  FISIK
+  TAKTIK
+  PERFORMANCE
+  FUNDAMENTAL
+  UMUM
+  LAINNYA
+}
+
+// §10 Status Verifikasi — diisi admin, bukan penginput
+enum CoachVerificationStatus {
+  MENUNGGU
+  TERVERIFIKASI
+  DITOLAK
+}
+
+enum CoachSubmissionStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  CREATED
+  REJECTED
+}
+
+// ─────────────────────────────────────────────
+// Master Data Wasit Tenis
+// Reference: docs "PRD – Master Data Wasit Tenis PELTI Bali"
+// ─────────────────────────────────────────────
+
+// §5 Peran Wasit — multi select, minimal satu (§16)
+enum OfficialRole {
+  CHAIR_UMPIRE
+  LINE_UMPIRE
+  REFEREE
+  CHIEF_UMPIRE
+}
+
+// §5 Tingkat Wasit — pengelompokan internal; kualifikasi resmi tetap
+// mengikuti lisensi/sertifikat yang dimiliki.
+enum OfficialLevel {
+  DAERAH
+  PROVINSI
+  NASIONAL
+  INTERNASIONAL
+}
+
+// §5 Status Wasit
+enum OfficialStatus {
+  AKTIF
+  TIDAK_AKTIF
+}
+
+// §7 Tingkat Turnamen pada riwayat penugasan
+enum TournamentLevel {
+  KABUPATEN_KOTA
+  PROVINSI
+  NASIONAL
+  INTERNASIONAL
+}
+
+// §10 Status Verifikasi — diisi admin, bukan penginput
+enum OfficialVerificationStatus {
+  MENUNGGU
+  TERVERIFIKASI
+  DITOLAK
+}
+
+enum OfficialSubmissionStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  CREATED
+  REJECTED
+}
+
+// ─────────────────────────────────────────────
 // Identity & Access (PRD §4)
 // ─────────────────────────────────────────────
 
@@ -103,8 +275,8 @@ model User {
   // PRD §4.4 — Account is bound to NIK
   nik      String? @unique
 
-  personId String? @unique
-  person   Person? @relation(fields: [personId], references: [id])
+  playerId String? @unique
+  player   Player? @relation(fields: [playerId], references: [id])
 
   userRoles     UserRole[]
   ownedForms    RegistrationForm[] @relation("FormOwner")
@@ -129,26 +301,6 @@ model UserRole {
   @@map("user_roles")
 }
 
-model Person {
-  id         String    @id @default(uuid())
-  fullName   String
-  birthPlace String?
-  birthDate  DateTime?
-  gender     Gender?
-  nik        String?   @unique
-  address    String?
-  phone      String?
-  instagram  String?
-  whatsapp   String?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-
-  user   User?
-  player Player?
-
-  @@map("persons")
-}
-
 // ─────────────────────────────────────────────
 // Organization (PRD §5)
 // ─────────────────────────────────────────────
@@ -162,6 +314,9 @@ model District {
   admins               UserRole[]
   auditLogs            AuditLog[]
   players              Player[]
+  facilities           Facility[]
+  coaches              Coach[]
+  officials            Official[]
   clubs                Club[]
   forms                RegistrationForm[]
   verificationRequests VerificationRequest[]
@@ -180,8 +335,17 @@ model Player {
   playerCode String       @unique // PL-BDG-000001
   status     PlayerStatus @default(PENDING_VERIFICATION)
 
-  personId String @unique
-  person   Person @relation(fields: [personId], references: [id])
+  fullName   String
+  birthPlace String?
+  birthDate  DateTime?
+  gender     Gender?
+  nik        String? @unique
+  address    String?
+  phone      String?
+  instagram  String?
+  whatsapp   String?
+
+  user User?
 
   districtId String
   district   District @relation(fields: [districtId], references: [id])
@@ -207,7 +371,7 @@ model Player {
   trackRecords    PlayerTrackRecord[]
   certificates    PlayerCertificate[]
   districtHistory DistrictHistory[]
-  submissions     FormSubmission[]
+  submissions     PlayerSubmission[]
   files           File[]             @relation("PlayerFiles")
 
   @@index([districtId, status])
@@ -320,14 +484,17 @@ model RegistrationForm {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  submissions FormSubmission[]
+  submissions         PlayerSubmission[]
+  facilitySubmissions FacilitySubmission[]
+  coachSubmissions    CoachSubmission[]
+  officialSubmissions OfficialSubmission[]
 
   // PRD §13 — satu form aktif per district per type (enforced in service)
   @@index([districtId, type, status])
   @@map("registration_forms")
 }
 
-model FormSubmission {
+model PlayerSubmission {
   id     String           @id @default(uuid())
   formId String
   form   RegistrationForm @relation(fields: [formId], references: [id])
@@ -368,7 +535,461 @@ model FormSubmission {
 
   @@index([formId, status])
   @@index([nik])
-  @@map("form_submissions")
+  @@map("player_submissions")
+}
+
+// ─────────────────────────────────────────────
+// Facility Registry (Master Sarana & Prasarana)
+// ─────────────────────────────────────────────
+
+// Pengajuan lapangan dari form publik per district — mirror PlayerSubmission.
+model FacilitySubmission {
+  id     String                   @id @default(uuid())
+  formId String
+  form   RegistrationForm         @relation(fields: [formId], references: [id])
+  status FacilitySubmissionStatus @default(SUBMITTED)
+
+  // §1 Identitas & Lokasi
+  name        String
+  address     String
+  mapsUrl     String?
+  latitude    Float?
+  longitude   Float?
+  description String?
+
+  // §2 Data Teknis
+  courtCount       Int
+  courtType        FacilityCourtType
+  surface          FacilitySurface
+  courtLength      Float?
+  courtWidth       Float?
+  clearanceBack    Float?
+  clearanceLeft    Float?
+  clearanceRight   Float?
+  surfaceCondition FacilitySurfaceCondition
+  hasLighting      Boolean                  @default(false)
+  lightCount       Int?
+  netCondition     FacilityNetCondition
+
+  // §5 Pengelola
+  managerName String?
+  picName     String?
+  picPhone    String?
+
+  // §6 Operasional
+  operationalStatus FacilityOperationalStatus @default(AKTIF)
+  openTime          String?
+  closeTime         String?
+  accessType        FacilityAccess            @default(UMUM)
+  hourlyRate        Int?
+
+  // §3 Foto — cover dipilih dari berkas yang diunggah
+  coverPhotoId String? @unique
+  coverPhoto   File?   @relation("FacilitySubmissionCover", fields: [coverPhotoId], references: [id])
+
+  // Hasil review
+  facilityId      String?
+  facility        Facility? @relation(fields: [facilityId], references: [id])
+  reviewedBy      String? // userId
+  reviewedAt      DateTime?
+  rejectionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  photos    File[]            @relation("FacilitySubmissionPhotos")
+  amenities FacilityAmenity[]
+
+  @@index([formId, status])
+  @@map("facility_submissions")
+}
+
+// §4 Sarana & Prasarana — satu baris per fasilitas, masing-masing boleh
+// punya deskripsi dan hingga 5 foto sendiri. Fasilitas di luar daftar master
+// dicatat dengan code = LAINNYA + customName, dan boleh lebih dari satu.
+model FacilityAmenity {
+  id          String  @id @default(uuid())
+  code        String // TOILET, KANTIN, … atau LAINNYA
+  customName  String? // wajib diisi bila code = LAINNYA
+  description String?
+  sortOrder   Int     @default(0)
+
+  facilityId String?
+  facility   Facility? @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  facilitySubmissionId String?
+  facilitySubmission   FacilitySubmission? @relation(fields: [facilitySubmissionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  photos File[] @relation("FacilityAmenityPhotos")
+
+  @@index([facilityId])
+  @@index([facilitySubmissionId])
+  @@map("facility_amenities")
+}
+
+// Master data lapangan — dibuat saat pengajuan disetujui admin.
+model Facility {
+  id           String @id @default(uuid())
+  facilityCode String @unique // FC-DPS-000001
+
+  districtId String
+  district   District @relation(fields: [districtId], references: [id])
+
+  // §1 Identitas & Lokasi
+  name        String
+  address     String
+  mapsUrl     String?
+  latitude    Float?
+  longitude   Float?
+  description String?
+
+  // §2 Data Teknis
+  courtCount       Int
+  courtType        FacilityCourtType
+  surface          FacilitySurface
+  courtLength      Float?
+  courtWidth       Float?
+  clearanceBack    Float?
+  clearanceLeft    Float?
+  clearanceRight   Float?
+  surfaceCondition FacilitySurfaceCondition
+  hasLighting      Boolean                  @default(false)
+  lightCount       Int?
+  netCondition     FacilityNetCondition
+
+  // §5 Pengelola
+  managerName String?
+  picName     String?
+  picPhone    String?
+
+  // §6 Operasional
+  operationalStatus FacilityOperationalStatus @default(AKTIF)
+  openTime          String?
+  closeTime         String?
+  accessType        FacilityAccess            @default(UMUM)
+  hourlyRate        Int?
+
+  // §3 Foto Utama / Cover
+  coverPhotoId String? @unique
+  coverPhoto   File?   @relation("FacilityCover", fields: [coverPhotoId], references: [id])
+
+  // §7 Verifikasi & Grade — admin only
+  verificationStatus FacilityVerificationStatus @default(MENUNGGU)
+  grade              FacilityGrade?
+  adminNotes         String?
+  verifiedAt         DateTime?
+  verifiedBy         String? // userId
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  photos      File[]               @relation("FacilityPhotos")
+  amenities   FacilityAmenity[]
+  submissions FacilitySubmission[]
+
+  @@index([districtId, verificationStatus])
+  @@index([districtId, grade])
+  @@map("facilities")
+}
+
+// ─────────────────────────────────────────────
+// Coach Registry (Master Data Pelatih)
+// ─────────────────────────────────────────────
+
+// Pengajuan pelatih dari form publik per district — mirror FacilitySubmission.
+model CoachSubmission {
+  id     String                @id @default(uuid())
+  formId String
+  form   RegistrationForm      @relation(fields: [formId], references: [id])
+  status CoachSubmissionStatus @default(SUBMITTED)
+
+  // §5 Informasi Pribadi
+  fullName  String
+  nik       String
+  gender    CoachGender
+  birthDate DateTime
+  address   String
+
+  // §6 Informasi Kepelatihan
+  coachStatus         CoachStatus            @default(AKTIF)
+  coachingSince       Int? // tahun mulai melatih; pengalaman dihitung dari sini
+  clubName            String?
+  athleteCategories   CoachAthleteCategory[]
+  activeAthletes      Int?
+  specializations     CoachSpecialization[]
+  otherSpecialization String? // wajib bila specializations memuat LAINNYA
+
+  // §8 Kontak Pelatih
+  whatsapp             String
+  email                String?
+  instagram            String?
+  acceptingNewAthletes Boolean @default(false)
+
+  // §9 Informasi Tambahan
+  experience String?
+
+  // §5 Foto Profil
+  photoId String? @unique
+  photo   File?   @relation("CoachSubmissionPhoto", fields: [photoId], references: [id])
+
+  // Hasil review
+  coachId         String?
+  coach           Coach?    @relation(fields: [coachId], references: [id])
+  reviewedBy      String? // userId
+  reviewedAt      DateTime?
+  rejectionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  certificates CoachCertificate[]
+
+  @@index([formId, status])
+  @@index([nik])
+  @@map("coach_submissions")
+}
+
+// §7 Lisensi & Sertifikasi — satu pelatih boleh punya banyak sertifikat,
+// masing-masing dengan satu berkas (PDF/JPG/PNG).
+model CoachCertificate {
+  id        String  @id @default(uuid())
+  name      String
+  level     String?
+  issuer    String?
+  year      Int?
+  sortOrder Int     @default(0)
+
+  coachId String?
+  coach   Coach?  @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  coachSubmissionId String?
+  coachSubmission   CoachSubmission? @relation(fields: [coachSubmissionId], references: [id], onDelete: Cascade)
+
+  fileId String? @unique
+  file   File?   @relation("CoachCertificateFile", fields: [fileId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([coachId])
+  @@index([coachSubmissionId])
+  @@map("coach_certificates")
+}
+
+// Master data pelatih — dibuat saat pengajuan disetujui admin.
+model Coach {
+  id        String @id @default(uuid())
+  coachCode String @unique // CO-DPS-000001
+
+  districtId String
+  district   District @relation(fields: [districtId], references: [id])
+
+  // §5 Informasi Pribadi — NIK unik & tidak pernah ditampilkan publik (§17–§18)
+  fullName  String
+  nik       String   @unique
+  gender    CoachGender
+  birthDate DateTime
+  address   String
+
+  // §6 Informasi Kepelatihan
+  coachStatus         CoachStatus            @default(AKTIF)
+  coachingSince       Int?
+  clubName            String?
+  athleteCategories   CoachAthleteCategory[]
+  activeAthletes      Int?
+  specializations     CoachSpecialization[]
+  otherSpecialization String?
+
+  // §8 Kontak Pelatih
+  whatsapp             String
+  email                String?
+  instagram            String?
+  acceptingNewAthletes Boolean @default(false)
+
+  // §9 Informasi Tambahan
+  experience String?
+
+  // §5 Foto Profil
+  photoId String? @unique
+  photo   File?   @relation("CoachPhoto", fields: [photoId], references: [id])
+
+  // §10 Verifikasi — admin only
+  verificationStatus CoachVerificationStatus @default(MENUNGGU)
+  adminNotes         String?
+  verifiedAt         DateTime?
+  verifiedBy         String? // userId
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  certificates CoachCertificate[]
+  submissions  CoachSubmission[]
+
+  @@index([districtId, verificationStatus])
+  @@index([districtId, coachStatus])
+  @@map("coaches")
+}
+
+// ─────────────────────────────────────────────
+// Official Registry (Master Data Wasit)
+// ─────────────────────────────────────────────
+
+// Pengajuan wasit dari form publik per district — mirror CoachSubmission.
+model OfficialSubmission {
+  id     String                   @id @default(uuid())
+  formId String
+  form   RegistrationForm         @relation(fields: [formId], references: [id])
+  status OfficialSubmissionStatus @default(SUBMITTED)
+
+  // §4 Informasi Pribadi
+  fullName  String
+  nik       String
+  gender    CoachGender // Laki-laki / Perempuan — sama dengan master pelatih
+  birthDate DateTime
+  address   String
+
+  // §5 Informasi Kewasitan
+  officialStatus  OfficialStatus @default(AKTIF)
+  officiatingSince Int // tahun mulai jadi wasit; pengalaman dihitung dari sini
+  roles           OfficialRole[]
+  level           OfficialLevel?
+
+  // §8 Kontak Wasit
+  whatsapp             String
+  email                String?
+  instagram            String?
+  acceptingAssignments Boolean @default(false)
+
+  // §9 Informasi Tambahan
+  experience String?
+
+  // §4 Foto Profil — wajib (§16)
+  photoId String? @unique
+  photo   File?   @relation("OfficialSubmissionPhoto", fields: [photoId], references: [id])
+
+  // Hasil review
+  officialId      String?
+  official        Official? @relation(fields: [officialId], references: [id])
+  reviewedBy      String? // userId
+  reviewedAt      DateTime?
+  rejectionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  certificates OfficialCertificate[]
+  tournaments  OfficialTournament[]
+
+  @@index([formId, status])
+  @@index([nik])
+  @@map("official_submissions")
+}
+
+// §6 Lisensi & Sertifikasi — satu wasit boleh punya banyak sertifikat,
+// masing-masing dengan satu berkas (PDF/JPG/PNG).
+model OfficialCertificate {
+  id        String  @id @default(uuid())
+  name      String
+  level     String?
+  issuer    String?
+  year      Int?
+  sortOrder Int     @default(0)
+
+  officialId String?
+  official   Official? @relation(fields: [officialId], references: [id], onDelete: Cascade)
+
+  officialSubmissionId String?
+  officialSubmission   OfficialSubmission? @relation(fields: [officialSubmissionId], references: [id], onDelete: Cascade)
+
+  fileId String? @unique
+  file   File?   @relation("OfficialCertificateFile", fields: [fileId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([officialId])
+  @@index([officialSubmissionId])
+  @@map("official_certificates")
+}
+
+// §7 Riwayat Turnamen — sumber angka "Jumlah Turnamen" yang dihitung otomatis
+// (§5), jadi tidak pernah diinput manual.
+model OfficialTournament {
+  id        String           @id @default(uuid())
+  name      String
+  year      Int?
+  level     TournamentLevel?
+  role      OfficialRole?
+  location  String?
+  sortOrder Int              @default(0)
+
+  officialId String?
+  official   Official? @relation(fields: [officialId], references: [id], onDelete: Cascade)
+
+  officialSubmissionId String?
+  officialSubmission   OfficialSubmission? @relation(fields: [officialSubmissionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([officialId])
+  @@index([officialSubmissionId])
+  @@map("official_tournament_histories")
+}
+
+// Master data wasit — dibuat saat pengajuan disetujui admin.
+model Official {
+  id           String @id @default(uuid())
+  officialCode String @unique // RF-DPS-000001
+
+  districtId String
+  district   District @relation(fields: [districtId], references: [id])
+
+  // §4 Informasi Pribadi — NIK unik & tidak ditampilkan publik (§16–§17)
+  fullName  String
+  nik       String      @unique
+  gender    CoachGender
+  birthDate DateTime
+  address   String
+
+  // §5 Informasi Kewasitan
+  officialStatus   OfficialStatus @default(AKTIF)
+  officiatingSince Int
+  roles            OfficialRole[]
+  level            OfficialLevel?
+
+  // §8 Kontak Wasit
+  whatsapp             String
+  email                String?
+  instagram            String?
+  acceptingAssignments Boolean @default(false)
+
+  // §9 Informasi Tambahan
+  experience String?
+
+  // §4 Foto Profil
+  photoId String? @unique
+  photo   File?   @relation("OfficialPhoto", fields: [photoId], references: [id])
+
+  // §10 Verifikasi — admin only
+  verificationStatus OfficialVerificationStatus @default(MENUNGGU)
+  adminNotes         String?
+  verifiedAt         DateTime?
+  verifiedBy         String? // userId
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  certificates OfficialCertificate[]
+  tournaments  OfficialTournament[]
+  submissions  OfficialSubmission[]
+
+  @@index([districtId, verificationStatus])
+  @@index([districtId, officialStatus])
+  @@map("officials")
 }
 
 // ─────────────────────────────────────────────
@@ -442,8 +1063,28 @@ model File {
   player   Player? @relation("PlayerFiles", fields: [playerId], references: [id])
   playerId String?
 
-  submission   FormSubmission? @relation("SubmissionFiles", fields: [submissionId], references: [id])
+  submission   PlayerSubmission? @relation("SubmissionFiles", fields: [submissionId], references: [id])
   submissionId String?
+
+  facility   Facility? @relation("FacilityPhotos", fields: [facilityId], references: [id])
+  facilityId String?
+
+  facilitySubmission   FacilitySubmission? @relation("FacilitySubmissionPhotos", fields: [facilitySubmissionId], references: [id])
+  facilitySubmissionId String?
+
+  facilityAmenity   FacilityAmenity? @relation("FacilityAmenityPhotos", fields: [facilityAmenityId], references: [id], onDelete: SetNull)
+  facilityAmenityId String?
+
+  facilityCover           Facility?           @relation("FacilityCover")
+  facilitySubmissionCover FacilitySubmission? @relation("FacilitySubmissionCover")
+
+  coachPhoto           Coach?            @relation("CoachPhoto")
+  coachSubmissionPhoto CoachSubmission?  @relation("CoachSubmissionPhoto")
+  coachCertificate     CoachCertificate? @relation("CoachCertificateFile")
+
+  officialPhoto           Official?            @relation("OfficialPhoto")
+  officialSubmissionPhoto OfficialSubmission?  @relation("OfficialSubmissionPhoto")
+  officialCertificate     OfficialCertificate? @relation("OfficialCertificateFile")
 
   @@index([entityType, entityId])
   @@map("files")

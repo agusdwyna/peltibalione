@@ -10,12 +10,30 @@ import PlayersPage from './modules/players/PlayersPage'
 import PlayerDetailPage from './modules/players/PlayerDetailPage'
 import PlayerSubmissionPage from './modules/players/PlayerSubmissionPage'
 import FormsPage from './modules/forms/FormsPage'
+import FacilitiesPage from './modules/facilities/FacilitiesPage'
+import FacilityDetailPage from './modules/facilities/FacilityDetailPage'
+import FacilityReviewPage from './modules/facilities/FacilityReviewPage'
+import FacilityReviewDetailPage from './modules/facilities/FacilityReviewDetailPage'
+import FacilitySubmissionPage from './modules/facilities/FacilitySubmissionPage'
+import CoachesPage from './modules/coaches/CoachesPage'
+import CoachDetailPage from './modules/coaches/CoachDetailPage'
+import CoachReviewPage from './modules/coaches/CoachReviewPage'
+import CoachReviewDetailPage from './modules/coaches/CoachReviewDetailPage'
+import CoachSubmissionPage from './modules/coaches/CoachSubmissionPage'
+import OfficialsPage from './modules/officials/OfficialsPage'
+import OfficialDetailPage from './modules/officials/OfficialDetailPage'
+import OfficialReviewPage from './modules/officials/OfficialReviewPage'
+import OfficialReviewDetailPage from './modules/officials/OfficialReviewDetailPage'
+import OfficialSubmissionPage from './modules/officials/OfficialSubmissionPage'
 import VerificationPage from './modules/verification/VerificationPage'
 import VerificationDetailPage from './modules/verification/VerificationDetailPage'
 import UsersPage from './modules/users/UsersPage'
 import AuditLogPage from './modules/audit-log/AuditLogPage'
 import SignIn from './pages/SignIn'
 import PublicFormPage from './pages/PublicFormPage'
+import PublicFacilityFormPage from './pages/PublicFacilityFormPage'
+import PublicCoachFormPage from './pages/PublicCoachFormPage'
+import PublicOfficialFormPage from './pages/PublicOfficialFormPage'
 import CheckStatusPage from './pages/CheckStatusPage'
 import NotFound from './pages/NotFound'
 import { AuthBootstrap, CentralOnlyRoute, ProtectedRoute, PublicOnlyRoute, WorkspaceRoute } from './routes/guards'
@@ -38,6 +56,9 @@ function App() {
       <Route path="/" element={<LandingMapPage />} />
       <Route path="/districts/:districtId" element={<PublicDistrictOverviewPage />} />
       <Route path="/form/player/:token" element={<PublicFormPage />} />
+      <Route path="/form/facility/:token" element={<PublicFacilityFormPage />} />
+      <Route path="/form/coach/:token" element={<PublicCoachFormPage />} />
+      <Route path="/form/official/:token" element={<PublicOfficialFormPage />} />
       <Route path="/check-status" element={<CheckStatusPage />} />
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>
@@ -48,6 +69,21 @@ function App() {
           <Route path="/players" element={<PlayersPage />} />
           <Route path="/players/new" element={<PlayerSubmissionPage />} />
           <Route path="/players/:playerId" element={<PlayerDetailPage />} />
+          <Route path="/facilities" element={<FacilitiesPage />} />
+          <Route path="/facilities/new" element={<FacilitySubmissionPage />} />
+          <Route path="/facilities/review" element={<FacilityReviewPage />} />
+          <Route path="/facilities/review/:submissionId" element={<FacilityReviewDetailPage />} />
+          <Route path="/facilities/:facilityId" element={<FacilityDetailPage />} />
+          <Route path="/coaches" element={<CoachesPage />} />
+          <Route path="/coaches/new" element={<CoachSubmissionPage />} />
+          <Route path="/coaches/review" element={<CoachReviewPage />} />
+          <Route path="/coaches/review/:submissionId" element={<CoachReviewDetailPage />} />
+          <Route path="/coaches/:coachId" element={<CoachDetailPage />} />
+          <Route path="/officials" element={<OfficialsPage />} />
+          <Route path="/officials/new" element={<OfficialSubmissionPage />} />
+          <Route path="/officials/review" element={<OfficialReviewPage />} />
+          <Route path="/officials/review/:submissionId" element={<OfficialReviewDetailPage />} />
+          <Route path="/officials/:officialId" element={<OfficialDetailPage />} />
           <Route path="/clubs" element={<PlaceholderPage title="Klub" />} />
           <Route path="/forms" element={<FormsPage />} />
           <Route path="/submissions" element={<PlaceholderPage title="Pengajuan" />} />

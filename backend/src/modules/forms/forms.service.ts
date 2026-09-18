@@ -1,13 +1,26 @@
 import { randomUUID } from 'crypto'
-import { Prisma } from '@prisma/client'
+import { Prisma, type FormType } from '@prisma/client'
 import { prisma } from '../../shared/database/prisma'
 import { AppError } from '../../shared/errors/app-error'
 import { writeAuditLog } from '../../shared/utils/audit'
 import type { CreateFormInput } from './forms.schema'
 
-export async function ensureDistrictForm(districtId: string, ownerUserId: string, attempt = 0) {
+/** Judul default per jenis form — dipakai saat form dibuat otomatis per district. */
+function defaultTitle(type: FormType, districtName: string) {
+  if (type === 'FACILITY_REGISTRATION') return `Form Pendataan Lapangan ${districtName}`
+  if (type === 'COACH_REGISTRATION') return `Form Pendataan Pelatih ${districtName}`
+  if (type === 'OFFICIAL_REGISTRATION') return `Form Pendataan Wasit ${districtName}`
+  return `Form Pendaftaran Pemain ${districtName}`
+}
+
+export async function ensureDistrictForm(
+  districtId: string,
+  ownerUserId: string,
+  type: FormType = 'PLAYER_REGISTRATION',
+  attempt = 0,
+) {
   const existing = await prisma.registrationForm.findFirst({
-    where: { districtId, type: 'PLAYER_REGISTRATION' },
+    where: { districtId, type },
     orderBy: { createdAt: 'desc' },
   })
   if (existing) return existing
@@ -18,8 +31,8 @@ export async function ensureDistrictForm(districtId: string, ownerUserId: string
   try {
     const form = await prisma.registrationForm.create({
       data: {
-        type: 'PLAYER_REGISTRATION',
-        title: `Form Pendaftaran Pemain ${district.name}`,
+        type,
+        title: defaultTitle(type, district.name),
         status: 'DRAFT',
         publicToken: randomUUID().replace(/-/g, '').slice(0, 12),
         ownerUserId,
@@ -34,19 +47,24 @@ export async function ensureDistrictForm(districtId: string, ownerUserId: string
       entityType: 'FORM',
       entityId: form.id,
       districtId: form.districtId,
-      newValue: { title: form.title, districtId: form.districtId, publicToken: form.publicToken },
+      newValue: { title: form.title, type, districtId: form.districtId, publicToken: form.publicToken },
     })
 
     // No DB unique on (districtId, type) — concurrent creates with distinct tokens
     // would both succeed. Keep oldest, delete own row if lost race.
     const siblings = await prisma.registrationForm.findMany({
-      where: { districtId, type: 'PLAYER_REGISTRATION' },
+      where: { districtId, type },
       orderBy: { createdAt: 'asc' },
     })
     if (siblings.length > 1 && siblings[0].id !== form.id) {
       // Only delete own row if untouched (no submissions yet) — never steal a live form.
-      const ownSubmissions = await prisma.formSubmission.count({ where: { formId: form.id } })
-      if (ownSubmissions === 0) {
+      const [ownSubmissions, ownFacilitySubmissions, ownCoachSubmissions, ownOfficialSubmissions] = await Promise.all([
+        prisma.playerSubmission.count({ where: { formId: form.id } }),
+        prisma.facilitySubmission.count({ where: { formId: form.id } }),
+        prisma.coachSubmission.count({ where: { formId: form.id } }),
+        prisma.officialSubmission.count({ where: { formId: form.id } }),
+      ])
+      if (ownSubmissions === 0 && ownFacilitySubmissions === 0 && ownCoachSubmissions === 0 && ownOfficialSubmissions === 0) {
         await prisma.registrationForm.delete({ where: { id: form.id } })
       }
       return siblings[0]
@@ -58,10 +76,10 @@ export async function ensureDistrictForm(districtId: string, ownerUserId: string
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
       const target = (err.meta?.target as string[] | undefined) ?? []
       if (target.includes('publicToken') && attempt === 0) {
-        return ensureDistrictForm(districtId, ownerUserId, attempt + 1)
+        return ensureDistrictForm(districtId, ownerUserId, type, attempt + 1)
       }
       const raced = await prisma.registrationForm.findFirst({
-        where: { districtId, type: 'PLAYER_REGISTRATION' },
+        where: { districtId, type },
         orderBy: { createdAt: 'desc' },
       })
       if (raced) return raced
@@ -71,9 +89,11 @@ export async function ensureDistrictForm(districtId: string, ownerUserId: string
 }
 
 export async function createForm(input: CreateFormInput, ownerUserId: string, districtId: string) {
+  const type = input.type ?? 'PLAYER_REGISTRATION'
+
   // PRD §13 — satu form aktif per district per type
   const activeForm = await prisma.registrationForm.findFirst({
-    where: { districtId, type: 'PLAYER_REGISTRATION', status: 'ACTIVE' },
+    where: { districtId, type, status: 'ACTIVE' },
   })
   if (activeForm) {
     throw AppError.conflict('ACTIVE_FORM_EXISTS', 'This district already has an active registration form')
@@ -81,7 +101,7 @@ export async function createForm(input: CreateFormInput, ownerUserId: string, di
 
   const form = await prisma.registrationForm.create({
     data: {
-      type: 'PLAYER_REGISTRATION',
+      type,
       title: input.title,
       description: input.description,
       status: 'DRAFT',
@@ -98,7 +118,7 @@ export async function createForm(input: CreateFormInput, ownerUserId: string, di
     entityType: 'FORM',
     entityId: form.id,
     districtId: form.districtId,
-    newValue: { title: form.title, districtId: form.districtId, publicToken: form.publicToken },
+    newValue: { title: form.title, type, districtId: form.districtId, publicToken: form.publicToken },
   })
 
   return form
@@ -115,11 +135,12 @@ export async function setFormStatus(
   if (form.districtId !== districtId) throw AppError.forbidden('Out of district scope')
 
   if (target === 'ACTIVE') {
-    // PRD §13 — enforce single active form per district (excluding this form)
+    // PRD §13 — single active form per district *per type*; a facility form and a
+    // player form may be open at the same time.
     const otherActive = await prisma.registrationForm.findFirst({
       where: {
         districtId,
-        type: 'PLAYER_REGISTRATION',
+        type: form.type,
         status: 'ACTIVE',
         id: { not: formId },
       },

@@ -17,7 +17,7 @@ import type {
 } from './players.schema'
 
 const playerDetailInclude = {
-  person: { include: { user: { select: { id: true } } } },
+  user: { select: { id: true } },
   district: { select: { id: true, name: true, code: true } },
   club: { select: { id: true, name: true } },
   ageGroupRef: true,
@@ -38,26 +38,17 @@ const playerDetailInclude = {
 }
 
 function publicPlayerDetail(player: any, req: Request) {
-  const { user: _user, nik, ...person } = player.person
-  const { ...safePlayer } = player
-  delete safePlayer.person.user
-  // NIK is sensitive: only an explicitly scoped admin detail may see it.
+  const { user: _user, nik, ...safePlayer } = player
   const showFullNik = isCentralAdmin(req) || Boolean(getDistrictScope(req))
-  return {
-    ...safePlayer,
-    person: {
-      ...person,
-      nik: showFullNik ? nik : nik ? maskNik(nik) : null,
-    },
-  }
+  return { ...safePlayer, nik: showFullNik ? nik : nik ? maskNik(nik) : null }
 }
 
 export async function getPlayerDetail(playerId: string, req: Request) {
   const player = await prisma.player.findUnique({ where: { id: playerId }, include: playerDetailInclude })
   if (!player) throw AppError.notFound('Player not found')
-  assertPlayerAccess(player.districtId, player.person.user?.id, req)
+  assertPlayerAccess(player.districtId, player.user?.id, req)
 
-  const resolved = await resolveAgeGroup(player.person.birthDate, player.ageGroup, player.person.gender)
+  const resolved = await resolveAgeGroup(player.birthDate, player.ageGroup, player.gender)
   const nextAgeGroupId = resolved?.id ?? null
   const nextAgeGroup = resolved?.code ?? null
   if (player.ageGroupId !== nextAgeGroupId || player.ageGroup !== nextAgeGroup) {
@@ -71,17 +62,17 @@ export async function getPlayerDetail(playerId: string, req: Request) {
 }
 
 /** Never persist a raw NIK into the audit trail. */
-function auditPerson(person: { fullName: string; nik: string | null; gender: string | null; birthPlace: string | null; birthDate: Date | null; address: string | null; phone: string | null; instagram: string | null; whatsapp: string | null }) {
+function auditIdentity(identity: { fullName: string; nik: string | null; gender: string | null; birthPlace: string | null; birthDate: Date | null; address: string | null; phone: string | null; instagram: string | null; whatsapp: string | null }) {
   return {
-    fullName: person.fullName,
-    nik: person.nik ? maskNik(person.nik) : null,
-    gender: person.gender,
-    birthPlace: person.birthPlace,
-    birthDate: person.birthDate,
-    address: person.address,
-    phone: person.phone,
-    instagram: person.instagram,
-    whatsapp: person.whatsapp,
+    fullName: identity.fullName,
+    nik: identity.nik ? maskNik(identity.nik) : null,
+    gender: identity.gender,
+    birthPlace: identity.birthPlace,
+    birthDate: identity.birthDate,
+    address: identity.address,
+    phone: identity.phone,
+    instagram: identity.instagram,
+    whatsapp: identity.whatsapp,
   }
 }
 
@@ -89,8 +80,7 @@ export async function updatePersonalInfo(playerId: string, input: UpdatePersonal
   const player = await getScopedPlayer(playerId, req)
   const actorId = requireActor(req)
   const { confirmIdentityChange, ...changes } = input
-  const oldPerson = await prisma.person.findUnique({ where: { id: player.personId } })
-  if (!oldPerson) throw AppError.notFound('Person not found')
+  const oldPlayer = player
 
   // NIK and gender are identity fields: require the explicit confirmation flag
   // sent by the client's confirmation dialog, and admin-level authority.
@@ -104,27 +94,27 @@ export async function updatePersonalInfo(playerId: string, input: UpdatePersonal
     }
   }
 
-  // Person.nik and User.nik are separately unique — changing NIK must not
+  // Player.nik and User.nik are separately unique — changing NIK must not
   // collide with either table.
-  if (changes.nik && changes.nik !== oldPerson.nik) {
-    const [personClash, userClash] = await Promise.all([
-      prisma.person.findUnique({ where: { nik: changes.nik }, select: { id: true } }),
+  if (changes.nik && changes.nik !== oldPlayer.nik) {
+    const [playerClash, userClash] = await Promise.all([
+      prisma.player.findUnique({ where: { nik: changes.nik }, select: { id: true } }),
       prisma.user.findUnique({ where: { nik: changes.nik }, select: { id: true } }),
     ])
-    if (personClash) throw AppError.conflict('NIK_ALREADY_USED', 'NIK sudah digunakan pemain lain')
+    if (playerClash) throw AppError.conflict('NIK_ALREADY_USED', 'NIK sudah digunakan pemain lain')
     if (userClash) throw AppError.conflict('NIK_ALREADY_USED', 'NIK sudah terhubung ke akun pengguna')
   }
 
-  const updatedPerson = await prisma.$transaction(async (tx) => {
-    const person = await tx.person.update({ where: { id: player.personId }, data: changes })
+  const updatedIdentity = await prisma.$transaction(async (tx) => {
+    const updated = await tx.player.update({ where: { id: player.id }, data: changes })
     // Keep the linked account's NIK in sync when one exists.
-    if (changes.nik && player.person.user?.id) {
-      await tx.user.update({ where: { id: player.person.user.id }, data: { nik: changes.nik } })
+    if (changes.nik && player.user?.id) {
+      await tx.user.update({ where: { id: player.user.id }, data: { nik: changes.nik } })
     }
-    return person
+    return updated
   })
 
-  const resolved = await resolveAgeGroup(updatedPerson.birthDate, player.ageGroup, updatedPerson.gender)
+  const resolved = await resolveAgeGroup(updatedIdentity.birthDate, player.ageGroup, updatedIdentity.gender)
   const nextAgeGroupId = resolved?.id ?? null
   const nextAgeGroup = resolved?.code ?? null
   const updatedPlayer = (player.ageGroupId !== nextAgeGroupId || player.ageGroup !== nextAgeGroup)
@@ -140,8 +130,8 @@ export async function updatePersonalInfo(playerId: string, input: UpdatePersonal
     entityType: 'PLAYER',
     entityId: player.id,
     districtId: player.districtId,
-    oldValue: { person: auditPerson(oldPerson), ageGroup: player.ageGroup },
-    newValue: { person: auditPerson(updatedPerson), ageGroup: updatedPlayer.ageGroup },
+    oldValue: { identity: auditIdentity(oldPlayer), ageGroup: player.ageGroup },
+    newValue: { identity: auditIdentity(updatedIdentity), ageGroup: updatedPlayer.ageGroup },
   })
 
   return getPlayerDetail(playerId, req)
@@ -174,10 +164,7 @@ export async function requestTransfer(playerId: string, toDistrictId: string, re
   })
   if (pending) throw AppError.conflict('TRANSFER_PENDING', 'Sudah ada permintaan transfer yang menunggu tinjauan')
 
-  const [fromDistrict, person] = await Promise.all([
-    prisma.district.findUnique({ where: { id: player.districtId }, select: { name: true, code: true } }),
-    prisma.person.findUnique({ where: { id: player.personId }, select: { fullName: true } }),
-  ])
+  const fromDistrict = await prisma.district.findUnique({ where: { id: player.districtId }, select: { name: true, code: true } })
 
   const request = await prisma.verificationRequest.create({
     data: {
@@ -190,7 +177,7 @@ export async function requestTransfer(playerId: string, toDistrictId: string, re
       payload: {
         playerId: player.id,
         playerCode: player.playerCode,
-        fullName: person?.fullName ?? null,
+        fullName: player.fullName,
         fromDistrictId: player.districtId,
         fromDistrictName: fromDistrict?.name ?? null,
         toDistrictId,
@@ -212,9 +199,9 @@ export async function requestTransfer(playerId: string, toDistrictId: string, re
 }
 
 export async function getScopedPlayer(playerId: string, req: Request) {
-  const player = await prisma.player.findUnique({ where: { id: playerId }, include: { person: { include: { user: { select: { id: true } } } } } })
+  const player = await prisma.player.findUnique({ where: { id: playerId }, include: { user: { select: { id: true } } } })
   if (!player) throw AppError.notFound('Player not found')
-  assertPlayerAccess(player.districtId, player.person.user?.id, req)
+  assertPlayerAccess(player.districtId, player.user?.id, req)
   return player
 }
 
@@ -435,4 +422,23 @@ export async function deleteCertificate(playerId: string, certificateId: string,
     oldValue: certificate,
   })
   return { id: certificate.id }
+}
+
+export async function updatePlayerStatus(playerId: string, status: 'VERIFIED' | 'ACTIVE' | 'INACTIVE', req: Request) {
+  const player = await getScopedPlayer(playerId, req)
+  if (!isCentralAdmin(req) && player.districtId !== getDistrictScope(req)) {
+    throw AppError.forbidden('Out of district scope')
+  }
+  if (!['VERIFIED', 'ACTIVE', 'INACTIVE'].includes(player.status)) {
+    throw AppError.badRequest('INVALID_STATUS_TRANSITION', 'Pemain harus disetujui melalui review pendaftaran terlebih dahulu')
+  }
+  const actorId = requireActor(req)
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.player.update({ where: { id: playerId }, data: { status } })
+    await tx.auditLog.create({ data: {
+      actorId, action: 'UPDATE_PLAYER_STATUS', entityType: 'PLAYER', entityId: playerId,
+      districtId: player.districtId, oldValue: { status: player.status }, newValue: { status },
+    } })
+    return { id: updated.id, status: updated.status }
+  })
 }

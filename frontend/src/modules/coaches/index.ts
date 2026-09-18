@@ -1,0 +1,5 @@
+export { default as CoachesPage } from './CoachesPage'
+export { default as CoachDetailPage } from './CoachDetailPage'
+export { default as CoachReviewPage } from './CoachReviewPage'
+export { default as CoachReviewDetailPage } from './CoachReviewDetailPage'
+export { default as CoachSubmissionPage } from './CoachSubmissionPage'
