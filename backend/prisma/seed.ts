@@ -54,7 +54,8 @@ async function main() {
   const centralPasswordHash = await bcrypt.hash('admin123!', 10)
   const centralAdmin = await prisma.user.upsert({
     where: { email: 'admin@peltibali.id' },
-    update: { name: 'Central Admin', passwordHash: centralPasswordHash, isActive: true },
+    // Never reset a password that has been changed after the initial seed.
+    update: { name: 'Central Admin', isActive: true },
     create: {
       email: 'admin@peltibali.id',
       name: 'Central Admin',
@@ -80,7 +81,8 @@ async function main() {
     const emailName = district.name.toLowerCase().replace(/[^a-z0-9]+/g, '')
     const districtAdmin = await prisma.user.upsert({
       where: { email: `admin@${emailName}.com` },
-      update: { name: `Admin ${district.name}`, passwordHash: districtPasswordHash, isActive: true },
+      // Keep the current password on repeat deploys/seeds.
+      update: { name: `Admin ${district.name}`, isActive: true },
       create: {
         email: `admin@${emailName}.com`,
         name: `Admin ${district.name}`,

@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
+import path from 'path'
 import { env } from './config/env'
 import { errorHandler } from './shared/middleware/error-handler'
 import { authRouter } from './modules/auth/auth.router'
@@ -25,7 +26,14 @@ import { statusRouter } from './modules/status/status.router'
 const app = express()
 
 // ── Global middleware ──────────────────────────────────────────
-app.use(helmet())
+if (env.NODE_ENV === 'production') app.set('trust proxy', 1)
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      imgSrc: ["'self'", 'data:', 'blob:'],
+    },
+  },
+}))
 app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }))
 app.use(express.json({ limit: '1mb' }))
 
@@ -53,6 +61,22 @@ app.use('/api/audit', auditRouter)
 app.use('/api/files', filesRouter)
 app.use('/api/stats', statsRouter)
 app.use('/api/status', statusRouter)
+
+// Return JSON for unknown API routes instead of the frontend HTML shell.
+app.use('/api', (_req, res) => {
+  res.status(404).json({ error: { code: 'NOT_FOUND', message: 'API route not found' } })
+})
+
+// In production the Docker image places the Vite build in backend/public.
+// Every non-API route falls back to index.html for React Router navigation.
+if (env.NODE_ENV === 'production') {
+  const frontendDir = path.resolve(__dirname, '../public')
+  app.use(express.static(frontendDir, { index: false, maxAge: '1y', immutable: true }))
+  app.get('*', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-cache')
+    res.sendFile(path.join(frontendDir, 'index.html'))
+  })
+}
 
 // ── Error handling ─────────────────────────────────────────────
 app.use(errorHandler)

@@ -28,7 +28,7 @@ export default function PublicFormPage() {
       .finally(() => setLoading(false))
   }, [token])
 
-  const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:4000/api'
+  const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api'
 
   const uploadPhoto = async (file: File, field: 'photoId' | 'achievementPhotoId') => {
     if (field === 'photoId') setPhotoUploading(true)

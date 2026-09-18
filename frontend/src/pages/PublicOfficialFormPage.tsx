@@ -14,7 +14,7 @@ import {
 } from '../modules/officials/TournamentEditor'
 import { readOfficialForm, validateOfficialForm } from '../modules/officials/official-form'
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:4000/api'
+const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api'
 
 type PublicForm = { id: string; title: string; description?: string | null; type?: string; district: { name: string } }
 

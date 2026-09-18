@@ -5,7 +5,7 @@ import { coachCertificateSchema, coachDetailSchema, coachSchema, coachStatsSchem
 import { officialCertificateSchema, officialDetailSchema, officialSchema, officialStatsSchema, officialSubmissionDetailSchema, officialSubmissionSchema, officialTournamentSchema, type OfficialCertificateInput, type OfficialFormInput, type OfficialLevel, type OfficialRole, type OfficialStatus, type OfficialTournamentInput, type OfficialVerificationStatus } from '../types/official'
 import { auditLogSchema, managedUserSchema, type CreateUserInput, type UpdateUserInput } from '../types/system'
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:4000/api'
+const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api'
 
 export class ApiError extends Error {
   status: number

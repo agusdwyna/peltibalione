@@ -5,7 +5,7 @@ import FacilityFormFields, { type FacilityPhoto } from '../modules/facilities/Fa
 import { draftsToInput, findUnnamedCustom, type AmenityDraft } from '../modules/facilities/AmenityEditor'
 import { readFacilityForm } from '../modules/facilities/facility-form'
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:4000/api'
+const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api'
 
 type PublicForm = { id: string; title: string; description?: string | null; type?: string; district: { name: string } }
 
