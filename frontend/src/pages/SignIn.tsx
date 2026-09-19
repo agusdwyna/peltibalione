@@ -52,7 +52,7 @@ export default function SignIn() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-900 px-4 py-12 font-inter">
+    <main className="flex min-h-screen items-center justify-center bg-black px-4 py-12 font-inter">
       <div className="w-full max-w-[400px]">
         <div className="mb-8 text-center">
           <Link to="/signin" className="mb-5 inline-flex items-center justify-center" aria-label="PELTI Bali One">
@@ -78,7 +78,7 @@ export default function SignIn() {
             <button className="btn w-full bg-violet-500 font-medium text-gray-900 hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-60" disabled={loading} type="submit">{loading ? 'Signing in…' : 'Sign in'}</button>
           </form>
         </div>
-        <p className="mt-6 text-center text-xs text-gray-500">PELTI Bali Data Center · Phase 1</p>
+        <p className="mt-6 text-center text-xs text-gray-500">PELTI Bali Data Center</p>
       </div>
     </main>
   )

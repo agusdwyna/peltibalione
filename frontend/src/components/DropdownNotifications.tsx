@@ -2,6 +2,25 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Transition from '../utils/Transition';
 
+/**
+ * Ikon pengumuman — menggantikan emoji agar tampilan tetap konsisten dengan
+ * ikon lain di header (semuanya SVG, bukan karakter unicode).
+ */
+function NoticeIcon({ variant }: { variant: 'announcement' | 'update' }) {
+  if (variant === 'update') {
+    return (
+      <svg className="mt-0.5 h-4 w-4 shrink-0 text-violet-500" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M12 2 9.6 8.4 3 9.2l4.8 4.3L6.4 20 12 16.6 17.6 20l-1.4-6.5L21 9.2l-6.6-.8L12 2Z" />
+      </svg>
+    );
+  }
+  return (
+    <svg className="mt-0.5 h-4 w-4 shrink-0 text-violet-500" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M18 11v2h4v-2h-4Zm-2 6.61c.96.71 2.21 1.65 3.2 2.39.4-.53.8-1.06 1.2-1.6-.99-.74-2.24-1.68-3.2-2.4-.4.54-.8 1.08-1.2 1.61ZM20.4 5.6c-.4-.53-.8-1.07-1.2-1.6-.99.74-2.24 1.68-3.2 2.4.4.53.8 1.07 1.2 1.6.96-.72 2.21-1.65 3.2-2.4ZM4 9c-1.1 0-2 .9-2 2v2c0 1.1.9 2 2 2h1v4h2v-4h1l5 3V6L8 9H4Zm11.5 3c0-1.33-.58-2.53-1.5-3.35v6.69c.92-.81 1.5-2.01 1.5-3.34Z" />
+    </svg>
+  );
+}
+
 function DropdownNotifications({
   align
 }) {
@@ -78,7 +97,7 @@ function DropdownNotifications({
                 to="#0"
                 onClick={() => setDropdownOpen(!dropdownOpen)}
               >
-                <span className="block text-sm mb-2">📣 <span className="font-medium text-gray-800 dark:text-gray-100">Edit your information in a swipe</span> Sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim.</span>
+                <span className="flex gap-2 text-sm mb-2"><NoticeIcon variant="announcement" /><span><span className="font-medium text-gray-800 dark:text-gray-100">Edit your information in a swipe</span> Sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim.</span></span>
                 <span className="block text-xs font-medium text-gray-400 dark:text-gray-500">Feb 12, 2024</span>
               </Link>
             </li>
@@ -88,7 +107,7 @@ function DropdownNotifications({
                 to="#0"
                 onClick={() => setDropdownOpen(!dropdownOpen)}
               >
-                <span className="block text-sm mb-2">📣 <span className="font-medium text-gray-800 dark:text-gray-100">Edit your information in a swipe</span> Sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim.</span>
+                <span className="flex gap-2 text-sm mb-2"><NoticeIcon variant="announcement" /><span><span className="font-medium text-gray-800 dark:text-gray-100">Edit your information in a swipe</span> Sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim.</span></span>
                 <span className="block text-xs font-medium text-gray-400 dark:text-gray-500">Feb 9, 2024</span>
               </Link>
             </li>
@@ -98,7 +117,7 @@ function DropdownNotifications({
                 to="#0"
                 onClick={() => setDropdownOpen(!dropdownOpen)}
               >
-                <span className="block text-sm mb-2">🚀<span className="font-medium text-gray-800 dark:text-gray-100">Say goodbye to paper receipts!</span> Sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim.</span>
+                <span className="flex gap-2 text-sm mb-2"><NoticeIcon variant="update" /><span><span className="font-medium text-gray-800 dark:text-gray-100">Say goodbye to paper receipts!</span> Sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim.</span></span>
                 <span className="block text-xs font-medium text-gray-400 dark:text-gray-500">Jan 24, 2024</span>
               </Link>
             </li>

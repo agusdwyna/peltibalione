@@ -49,7 +49,7 @@ export default function DropdownProfile({ align }: DropdownProfileProps) {
       <div ref={dropdown}>
         <div className="mb-1 border-b border-gray-200 px-3 pb-2 pt-0.5 dark:border-gray-700/60"><div className="font-medium text-gray-800 dark:text-gray-100">{user?.name ?? 'PELTI Admin'}</div><div className="text-xs italic text-gray-500 dark:text-gray-400">{roleLabel}</div>{workspace && <div className="mt-1 truncate text-xs text-gray-400">{workspace.code} · {workspace.name}</div>}</div>
         <ul>
-          {isCentral && <li><Link className="flex items-center px-3 py-1 text-sm font-medium text-violet-500 hover:text-violet-600 dark:hover:text-violet-400" to="/workspaces" onClick={() => setDropdownOpen(false)}>Switch workspace</Link></li>}
+          {isCentral && <li><Link className="flex items-center px-3 py-1 text-sm font-medium text-violet-500 hover:text-violet-600 dark:hover:text-violet-400" to="/" onClick={() => setDropdownOpen(false)}>Kembali ke peta</Link></li>}
           <li><Link className="flex items-center px-3 py-1 text-sm font-medium text-violet-500 hover:text-violet-600 dark:hover:text-violet-400" to="/settings" onClick={() => setDropdownOpen(false)}>Settings</Link></li>
           <li><button className="flex w-full items-center px-3 py-1 text-left text-sm font-medium text-violet-500 hover:text-violet-600 dark:hover:text-violet-400" onClick={handleLogout}>Sign Out</button></li>
         </ul>

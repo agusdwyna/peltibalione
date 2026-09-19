@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { api, ApiError } from '../../lib/api'
 import AuthenticatedImage from '../../components/ui/AuthenticatedImage'
+import BackLink from '../../components/portal/BackLink'
 import { useAuthStore } from '../../stores/auth.store'
 import { useWorkspaceStore } from '../../stores/workspace.store'
 import type { SubmissionDetail } from '../../types/portal'
@@ -42,10 +43,10 @@ export default function VerificationDetailPage() {
   }
 
   if (loading) return <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8"><p className="text-sm text-gray-500">Memuat detail…</p></div>
-  if (error || !submission) return <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8"><Link className="text-sm text-gray-500 hover:text-gray-800" to="/verification">Kembali ke verifikasi</Link><div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error || 'Pengajuan tidak ditemukan.'}</div></div>
+  if (error || !submission) return <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8"><BackLink to="/verification" label="Kembali ke verifikasi" /><div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error || 'Pengajuan tidak ditemukan.'}</div></div>
 
   return <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8">
-    <div className="mb-6"><Link className="text-sm text-gray-500 hover:text-gray-800 dark:hover:text-gray-200" to="/verification">← Kembali ke verifikasi</Link></div>
+    <div className="mb-6"><BackLink to="/verification" label="Kembali ke verifikasi" /></div>
     {error && <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
     <section className="rounded-xl bg-white p-6 shadow-xs dark:bg-gray-800 sm:p-8">
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-gray-100 pb-5 dark:border-gray-700/60"><div><p className="text-xs uppercase tracking-wide text-gray-400">Detail pengajuan</p><h1 className="mt-1 text-2xl font-bold text-gray-800 dark:text-gray-100">{submission.fullName}</h1><p className="mt-1 text-sm text-gray-500">{submission.form?.district.name ?? '—'} · {submission.form?.title ?? '—'}</p></div><span className="rounded-full bg-violet-500/10 px-2.5 py-1 text-xs font-medium text-violet-700">{submission.status}</span></div>

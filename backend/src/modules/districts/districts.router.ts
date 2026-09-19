@@ -1,17 +1,14 @@
 import { Router } from 'express'
 import { authenticate } from '../../shared/middleware/authenticate'
 import { prisma } from '../../shared/database/prisma'
+import {
+  PUBLIC_COACH_STATUS,
+  PUBLIC_FACILITY_STATUS,
+  PUBLIC_OFFICIAL_STATUS,
+  PUBLIC_PLAYER_STATUSES,
+} from '../../shared/utils/public-visibility'
 
 export const districtsRouter = Router()
-
-const PUBLIC_PLAYER_STATUSES = ['VERIFIED', 'ACTIVE', 'INACTIVE'] as const
-// Halaman publik hanya menampilkan data resmi — lapangan yang masih MENUNGGU
-// atau DITOLAK belum terverifikasi, jadi tidak ikut dihitung.
-const PUBLIC_FACILITY_STATUS = 'TERVERIFIKASI' as const
-// Idem untuk pelatih & wasit — hanya yang sudah diverifikasi admin yang
-// dihitung publik.
-const PUBLIC_COACH_STATUS = 'TERVERIFIKASI' as const
-const PUBLIC_OFFICIAL_STATUS = 'TERVERIFIKASI' as const
 
 // GET /api/districts — public landing data with official player & facility counts only
  districtsRouter.get('/', async (_req, res, next) => {
@@ -54,13 +51,101 @@ const PUBLIC_OFFICIAL_STATUS = 'TERVERIFIKASI' as const
   } catch (err) { next(err) }
 })
 
-// GET /api/districts/:id/overview — safe public district overview
+// GET /api/districts/:id/overview — safe public district overview.
+// Hanya field yang boleh tampil publik: tanpa NIK, alamat, kontak, atau berkas.
  districtsRouter.get('/:id/overview', async (req, res, next) => {
   try {
     const district = await prisma.district.findUnique({ where: { id: req.params.id }, select: { id: true, code: true, name: true } })
     if (!district) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'District not found' } })
-    const players = await prisma.player.findMany({ where: { districtId: district.id, status: { in: [...PUBLIC_PLAYER_STATUSES] } }, orderBy: { playerCode: 'asc' }, take: 100, select: { playerCode: true, fullName: true } })
-    res.json({ data: { district: { ...district, officialPlayerCount: players.length }, players: players.map((player) => ({ playerCode: player.playerCode, fullName: player.fullName })) } })
+
+    const [players, facilities, coaches, officials, forms] = await Promise.all([
+      prisma.player.findMany({
+        where: { districtId: district.id, status: { in: [...PUBLIC_PLAYER_STATUSES] } },
+        orderBy: { playerCode: 'asc' },
+        take: 100,
+        select: {
+          playerCode: true, fullName: true, gender: true, ageGroup: true, status: true,
+          club: { select: { name: true } },
+          pnpRankings: { orderBy: { updatedAt: 'desc' }, take: 1, select: { rank: true, period: true } },
+        },
+      }),
+      prisma.facility.findMany({
+        where: { districtId: district.id, verificationStatus: PUBLIC_FACILITY_STATUS },
+        orderBy: { name: 'asc' },
+        take: 100,
+        select: { facilityCode: true, name: true, address: true, courtCount: true, courtType: true, grade: true, openTime: true, closeTime: true, coverPhotoId: true },
+      }),
+      prisma.coach.findMany({
+        where: { districtId: district.id, verificationStatus: PUBLIC_COACH_STATUS },
+        orderBy: { fullName: 'asc' },
+        take: 100,
+        select: { coachCode: true, fullName: true, clubName: true, coachingSince: true, specializations: true, photoId: true },
+      }),
+      prisma.official.findMany({
+        where: { districtId: district.id, verificationStatus: PUBLIC_OFFICIAL_STATUS },
+        orderBy: { fullName: 'asc' },
+        take: 100,
+        select: { officialCode: true, fullName: true, level: true, officiatingSince: true, roles: true, photoId: true },
+      }),
+      // Form aktif dipakai tombol "Daftar" di halaman detail publik.
+      prisma.registrationForm.findMany({
+        where: { districtId: district.id, status: 'ACTIVE' },
+        select: { publicToken: true, type: true, title: true },
+      }),
+    ])
+
+    const formByType = new Map(forms.map((form) => [form.type, form.publicToken]))
+
+    res.json({
+      data: {
+        district: { ...district, officialPlayerCount: players.length },
+        players: players.map((player) => ({
+          playerCode: player.playerCode,
+          fullName: player.fullName,
+          gender: player.gender,
+          ageGroup: player.ageGroup,
+          status: player.status,
+          clubName: player.club?.name ?? null,
+          pnpRank: player.pnpRankings[0]?.rank ?? null,
+          pnpPeriod: player.pnpRankings[0]?.period ?? null,
+        })),
+        facilities: facilities.map((facility) => ({
+          facilityCode: facility.facilityCode,
+          name: facility.name,
+          address: facility.address,
+          courtCount: facility.courtCount,
+          courtType: facility.courtType,
+          grade: facility.grade,
+          openTime: facility.openTime,
+          closeTime: facility.closeTime,
+          // Foto lapangan memang publik (lihat files.access.ts). Foto pemain
+          // sengaja TIDAK dikirim — pemain KU 8–18 adalah anak-anak.
+          coverPhotoId: facility.coverPhotoId,
+        })),
+        coaches: coaches.map((coach) => ({
+          coachCode: coach.coachCode,
+          fullName: coach.fullName,
+          clubName: coach.clubName,
+          coachingSince: coach.coachingSince,
+          specializations: coach.specializations,
+          photoId: coach.photoId,
+        })),
+        officials: officials.map((official) => ({
+          officialCode: official.officialCode,
+          fullName: official.fullName,
+          level: official.level,
+          officiatingSince: official.officiatingSince,
+          roles: official.roles,
+          photoId: official.photoId,
+        })),
+        registrationForms: {
+          player: formByType.get('PLAYER_REGISTRATION') ?? null,
+          facility: formByType.get('FACILITY_REGISTRATION') ?? null,
+          coach: formByType.get('COACH_REGISTRATION') ?? null,
+          official: formByType.get('OFFICIAL_REGISTRATION') ?? null,
+        },
+      },
+    })
   } catch (err) { next(err) }
 })
 

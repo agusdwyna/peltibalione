@@ -35,6 +35,10 @@ import PublicFacilityFormPage from './pages/PublicFacilityFormPage'
 import PublicCoachFormPage from './pages/PublicCoachFormPage'
 import PublicOfficialFormPage from './pages/PublicOfficialFormPage'
 import CheckStatusPage from './pages/CheckStatusPage'
+import PublicPlayerDetailPage from './pages/PublicPlayerDetailPage'
+import PublicCoachDetailPage from './pages/PublicCoachDetailPage'
+import PublicOfficialDetailPage from './pages/PublicOfficialDetailPage'
+import PublicFacilityDetailPage from './pages/PublicFacilityDetailPage'
 import NotFound from './pages/NotFound'
 import { AuthBootstrap, CentralOnlyRoute, ProtectedRoute, PublicOnlyRoute, WorkspaceRoute } from './routes/guards'
 import { useAuthStore } from './stores/auth.store'
@@ -52,14 +56,29 @@ function App() {
   return <Routes>
     <Route element={<AuthBootstrap />}>
       <Route element={<PublicOnlyRoute />}><Route path="/signin" element={<SignIn />} /></Route>
+      {/* Tidak ada halaman pemilih workspace terpisah — berganti wilayah
+          dilakukan dari peta: klik wilayahnya, atau buka beranda. */}
       <Route element={<WorkspaceRoute />}><Route path="/workspaces" element={<Navigate to="/" replace />} /></Route>
       <Route path="/" element={<LandingMapPage />} />
       <Route path="/districts/:districtId" element={<PublicDistrictOverviewPage />} />
+      {/* Tanpa token: form memang belum dibuka — halaman form sendiri yang
+          menjelaskan keadaannya dengan pesan yang sopan. */}
+      <Route path="/form/player" element={<PublicFormPage />} />
+      <Route path="/form/facility" element={<PublicFacilityFormPage />} />
+      <Route path="/form/coach" element={<PublicCoachFormPage />} />
+      <Route path="/form/official" element={<PublicOfficialFormPage />} />
       <Route path="/form/player/:token" element={<PublicFormPage />} />
       <Route path="/form/facility/:token" element={<PublicFacilityFormPage />} />
       <Route path="/form/coach/:token" element={<PublicCoachFormPage />} />
       <Route path="/form/official/:token" element={<PublicOfficialFormPage />} />
       <Route path="/check-status" element={<CheckStatusPage />} />
+      {/* Detail publik memakai rute berbahasa Indonesia dan kode resmi sebagai
+          kunci, supaya tidak mungkin bertabrakan dengan rute admin
+          (/players/:playerId dan sejenisnya) yang butuh login. */}
+      <Route path="/pemain/:code" element={<PublicPlayerDetailPage />} />
+      <Route path="/pelatih/:code" element={<PublicCoachDetailPage />} />
+      <Route path="/wasit/:code" element={<PublicOfficialDetailPage />} />
+      <Route path="/lapangan/:code" element={<PublicFacilityDetailPage />} />
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>
           <Route path="/dashboard" element={<Dashboard />} />

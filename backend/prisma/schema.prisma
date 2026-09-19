@@ -18,6 +18,9 @@ enum Role {
   CENTRAL_ADMIN
   DISTRICT_ADMIN
   PLAYER
+  // Peran portal mandiri — pemilik data, bukan pengelola sistem.
+  COACH
+  OFFICIAL
 }
 
 enum Gender {
@@ -278,12 +281,40 @@ model User {
   playerId String? @unique
   player   Player? @relation(fields: [playerId], references: [id])
 
+  // Satu NIK = satu akun. Akun yang sama boleh memegang beberapa peran
+  // sekaligus (mis. pemain yang juga pelatih) — lihat UserRole.
+  coachId String? @unique
+  coach   Coach?  @relation(fields: [coachId], references: [id])
+  officialId String? @unique
+  official   Official? @relation(fields: [officialId], references: [id])
+
   userRoles     UserRole[]
   ownedForms    RegistrationForm[] @relation("FormOwner")
   auditLogs     AuditLog[]
   uploadedFiles File[]
+  activations   AccountActivation[]
 
   @@map("users")
+}
+
+/**
+ * Token aktivasi akun sekali-pakai.
+ *
+ * Password tidak pernah dibuat sistem maupun dikirim lewat email — pemilik
+ * akun menetapkannya sendiri lewat tautan ini. Yang disimpan hanya hash token,
+ * sehingga bocornya isi tabel tidak cukup untuk mengambil alih akun.
+ */
+model AccountActivation {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("account_activations")
 }
 
 model UserRole {
@@ -827,6 +858,7 @@ model Coach {
 
   certificates CoachCertificate[]
   submissions  CoachSubmission[]
+  user         User?
 
   @@index([districtId, verificationStatus])
   @@index([districtId, coachStatus])
@@ -986,6 +1018,7 @@ model Official {
   certificates OfficialCertificate[]
   tournaments  OfficialTournament[]
   submissions  OfficialSubmission[]
+  user         User?
 
   @@index([districtId, verificationStatus])
   @@index([districtId, officialStatus])

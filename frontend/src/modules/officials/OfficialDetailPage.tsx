@@ -1,10 +1,11 @@
 import { FormEvent, useEffect, useState, type ReactNode } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { api, ApiError } from '../../lib/api'
 import AuthenticatedImage from '../../components/ui/AuthenticatedImage'
 import { useAuthStore } from '../../stores/auth.store'
 import CertificateTable from '../../components/certificates/CertificateTable'
 import FormRow, { FormRows, FormSection, SaveRow } from '../../components/portal/FormRow'
+import BackLink from '../../components/portal/BackLink'
 import TournamentTable from './TournamentTable'
 import {
   GENDER_OPTIONS,
@@ -171,9 +172,7 @@ export default function OfficialDetailPage() {
   if (!official)
     return (
       <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8">
-        <Link className="text-sm text-gray-500 hover:text-gray-800" to="/officials">
-          Kembali ke daftar wasit
-        </Link>
+        <BackLink to="/officials" label="Kembali ke daftar wasit" />
         <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error || 'Wasit tidak ditemukan.'}</div>
       </div>
     )
@@ -208,9 +207,7 @@ export default function OfficialDetailPage() {
   return (
     <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-6">
-        <Link className="text-sm font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200" to="/officials">
-          Kembali ke daftar wasit
-        </Link>
+        <BackLink to="/officials" label="Kembali ke daftar wasit" />
       </div>
       {error && (
         <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
@@ -314,7 +311,7 @@ export default function OfficialDetailPage() {
           {/* ── Tab 1: Informasi Pribadi ────────────────────────── */}
           {tab === 'personal' && (
             <form onSubmit={savePersonal}>
-              <FormSection title="Data diri" description="Identitas dasar wasit. NIK dan alamat tidak ditampilkan pada halaman publik.">
+              <FormSection title="Data diri">
                 <FormRows>
                   <FormRow label="Nama lengkap">
                     <input className="form-input w-full sm:max-w-sm" name="fullName" defaultValue={official.fullName} required maxLength={200} />
@@ -348,11 +345,11 @@ export default function OfficialDetailPage() {
                       max={new Date().toISOString().slice(0, 10)}
                     />
                   </FormRow>
-                  <FormRow label="Umur" value={age == null ? null : `${age} tahun`} hint="Otomatis dari tanggal lahir" />
+                  <FormRow label="Umur" value={age == null ? null : `${age} tahun`} hint="Otomatis" />
                 </FormRows>
               </FormSection>
 
-              <FormSection title="Kontak" description="Kanal komunikasi dan kesediaan menerima penugasan.">
+              <FormSection title="Kontak">
                 <FormRows>
                   <FormRow label="Alamat lengkap">
                     <textarea className="form-textarea w-full sm:max-w-md" name="address" rows={2} defaultValue={official.address} required maxLength={1000} />
@@ -375,7 +372,7 @@ export default function OfficialDetailPage() {
                 </FormRows>
               </FormSection>
 
-              <FormSection title="Pengalaman / catatan kewasitan" description="Rekam jejak kewasitan yang perlu dicatat.">
+              <FormSection title="Pengalaman / catatan kewasitan">
                 <FormRows>
                   <FormRow label="Pengalaman / catatan">
                     <textarea className="form-textarea w-full sm:max-w-2xl" name="experience" rows={4} defaultValue={official.experience ?? ''} maxLength={4000} />
@@ -389,7 +386,7 @@ export default function OfficialDetailPage() {
           {/* ── Tab 2: Informasi Kewasitan ──────────────────────── */}
           {tab === 'officiating' && (
             <form onSubmit={saveOfficiating}>
-              <FormSection title="Informasi kewasitan" description="Peran dan tingkat kewasitan. Jumlah turnamen dihitung otomatis dari tab Riwayat Turnamen.">
+              <FormSection title="Informasi kewasitan">
                 <FormRows>
                   <FormRow label="Status wasit">
                     <select className="form-select w-full sm:max-w-[200px]" name="officialStatus" defaultValue={official.officialStatus}>
@@ -409,7 +406,7 @@ export default function OfficialDetailPage() {
                       defaultValue={official.officiatingSince}
                     />
                   </FormRow>
-                  <FormRow label="Pengalaman" value={formatExperience(official.officiatingSince)} hint="Otomatis dari tahun menjadi wasit" />
+                  <FormRow label="Pengalaman" value={formatExperience(official.officiatingSince)} hint="Otomatis" />
                   <FormRow label="Peran wasit" hint="Minimal satu peran">
                     <div className="flex flex-wrap gap-3">
                       {OFFICIAL_ROLE_OPTIONS.map((option) => (
@@ -443,7 +440,7 @@ export default function OfficialDetailPage() {
                       ))}
                     </select>
                   </FormRow>
-                  <FormRow label="Jumlah turnamen" value={`${tournamentCount} turnamen`} hint="Otomatis dari riwayat turnamen" />
+                  <FormRow label="Jumlah turnamen" value={`${tournamentCount} turnamen`} hint="Otomatis" />
                 </FormRows>
               </FormSection>
               <SaveRow saving={saving} />

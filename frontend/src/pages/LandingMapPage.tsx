@@ -7,7 +7,7 @@ import { useWorkspaceStore } from '../stores/workspace.store'
 import type { District } from '../types/auth'
 
 function StatCard({ label, value, active }: { label: string; value: number; active: boolean }) {
-  return <div className="border-l border-gray-300 pl-5 dark:border-gray-600"><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">{label}</p><p className={`mt-2 text-5xl font-bold tracking-[-0.04em] ${active ? 'text-gray-900 dark:text-white' : 'text-gray-300 dark:text-gray-600'}`}>{value.toLocaleString('id-ID')}</p><p className="mt-2 text-xs text-gray-500">{active ? 'Data resmi saat ini' : 'Segera tersedia'}</p></div>
+  return <div className="border-l border-gray-300 pl-5 dark:border-gray-600"><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">{label}</p><p className={`mt-1.5 text-4xl font-bold tracking-[-0.04em] xl:text-5xl ${active ? 'text-gray-900 dark:text-white' : 'text-gray-300 dark:text-gray-600'}`}>{value.toLocaleString('id-ID')}</p><p className="mt-1.5 text-xs text-gray-500">{active ? 'Data resmi saat ini' : 'Segera tersedia'}</p></div>
 }
 
 export default function LandingMapPage() {
@@ -31,9 +31,9 @@ export default function LandingMapPage() {
   const manage = (district: District) => { if (!user) { navigate('/signin', { state: { from: '/', intentDistrictId: district.id } }); return }; if (!isCentral && district.id !== assignedId) return; selectWorkspace(district); navigate('/dashboard') }
   const doubleClick = (district: District) => { if (!user) { detail(district); return }; manage(district) }
 
-  return <main className="min-h-screen bg-gray-50 dark:bg-gray-900">
-    <header className="sticky top-0 z-40 bg-gray-50 dark:bg-gray-900">
-      <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-5 sm:px-6 lg:px-8">
+  return <main className="flex min-h-screen flex-col bg-gray-50 dark:bg-gray-900 lg:h-screen lg:overflow-hidden">
+    <header className="z-40 shrink-0 bg-gray-50 dark:bg-gray-900">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 sm:px-6 lg:h-20 lg:px-8">
         <div className="flex items-center gap-3">
           <svg className="h-10 w-10 fill-violet-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" aria-label="PELTI Bali One"><path d="M31.956 14.8C31.372 6.92 25.08.628 17.2.044V5.76a9.04 9.04 0 0 0 9.04 9.04h5.716ZM14.8 26.24v5.716C6.92 31.372.63 25.08.044 17.2H5.76a9.04 9.04 0 0 1 9.04 9.04Zm11.44-9.04h5.716c-.584 7.88-6.876 14.172-14.756 14.756V26.24a9.04 9.04 0 0 1 9.04-9.04ZM.044 14.8C.63 6.92 6.92.628 14.8.044V5.76a9.04 9.04 0 0 1-9.04 9.04H.044Z" /></svg>
           <span className="text-xl font-bold uppercase tracking-[0.16em] text-gray-800 dark:text-gray-100">PELTI Bali One</span>
@@ -41,10 +41,13 @@ export default function LandingMapPage() {
         {user ? <div className="flex items-center gap-3"><span className="text-sm font-medium text-green-700">Admin aktif</span>{isCentral && <button className="btn border border-gray-300 bg-white px-4 text-sm text-gray-800 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700" onClick={() => { selectAllRegions(); navigate('/dashboard/all-regions') }}>Semua Wilayah</button>}</div> : <button className="btn bg-gray-900 px-4 text-sm text-white hover:bg-gray-800" onClick={() => navigate('/signin')}>Sign in</button>}
       </div>
     </header>
-    <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-7xl flex-col justify-center px-5 py-10 sm:px-6 lg:px-8">
-      {error && <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
-      {loading ? <div className="p-10 text-center text-sm text-gray-500">Memuat peta kabupaten/kota…</div> : districts.length > 0 && <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_260px]"><BaliDistrictMap districts={districts} disabledCodes={disabledCodes} onDetail={detail} onManage={manage} onDoubleClick={doubleClick} /><aside className="grid grid-cols-2 gap-x-8 gap-y-9 lg:grid-cols-1 lg:gap-y-10" aria-label="Statistik Pelti Bali"><StatCard label="Atlet" value={animatedAthletes} active={!statsLoading} /><StatCard label="Pelatih" value={stats.coaches} active={!statsLoading} /><StatCard label="Satpras" value={stats.facilities} active={!statsLoading} /><StatCard label="Wasit" value={stats.referees} active={!statsLoading} /></aside></div>}
-      <p className="mt-auto pt-10 text-left text-xs text-gray-400">Pilih wilayah untuk melihat overview pemain atau masuk ke workspace pengelolaan.</p>
+    <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col justify-center px-5 py-6 sm:px-6 lg:px-8 lg:py-4">
+      {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+      {loading ? <div className="p-10 text-center text-sm text-gray-500">Memuat peta kabupaten/kota…</div> : districts.length > 0 && <div className="grid min-h-0 items-center gap-8 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_240px] lg:items-stretch"><div className="min-w-0 lg:min-h-0"><BaliDistrictMap districts={districts} disabledCodes={disabledCodes} onDetail={detail} onManage={manage} onDoubleClick={doubleClick} fit /></div><aside className="grid grid-cols-2 gap-x-6 gap-y-6 lg:grid-cols-1 lg:gap-y-6 lg:self-center" aria-label="Statistik Pelti Bali"><StatCard label="Atlet" value={animatedAthletes} active={!statsLoading} /><StatCard label="Pelatih" value={stats.coaches} active={!statsLoading} /><StatCard label="Satpras" value={stats.facilities} active={!statsLoading} /><StatCard label="Wasit" value={stats.referees} active={!statsLoading} /></aside></div>}
+      <div className="mt-6 shrink-0 border-t border-gray-200/70 pt-4 dark:border-gray-700/60 lg:mt-4">
+        <p className="text-sm font-bold text-gray-800 dark:text-gray-100">Sistem pendataan resmi atlet, pelatih, satpras, dan wasit PELTI Bali.</p>
+        <p className="mt-1 text-left text-xs text-gray-400">Pilih wilayah untuk melihat overview pemain atau masuk ke workspace pengelolaan.</p>
+      </div>
     </div>
   </main>
 }

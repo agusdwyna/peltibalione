@@ -1,5 +1,5 @@
 import { authUserSchema, districtSchema, type AuthUser, type District } from '../types/auth'
-import { ageGroupSchema, certificateSchema, checkStatusResultSchema, formSchema, paginationMetaSchema, playerDetailSchema, playerSchema, pnpRankingSchema, publicDistrictOverviewSchema, publicSubmissionSchema, statsOverviewSchema, submissionDetailSchema, submissionSchema, trackRecordSchema, updatePlayerPersonalInfoSchema, verificationSchema, type FormType, type PublicSubmissionInput, type UpdatePlayerPersonalInfoInput } from '../types/portal'
+import { ageGroupSchema, certificateSchema, checkStatusResultSchema, facilitySearchResultSchema, formSchema, paginationMetaSchema, playerDetailSchema, playerSchema, pnpRankingSchema, publicCoachDetailSchema, publicDistrictOverviewSchema, publicFacilityDetailSchema, publicOfficialDetailSchema, publicPlayerDetailSchema, publicSubmissionSchema, statsOverviewSchema, submissionDetailSchema, submissionSchema, trackRecordSchema, updatePlayerPersonalInfoSchema, verificationSchema, type FormType, type PublicSubmissionInput, type UpdatePlayerPersonalInfoInput } from '../types/portal'
 import { facilityAmenitySchema, facilityDetailSchema, facilitySchema, facilityStatsSchema, facilitySubmissionDetailSchema, facilitySubmissionSchema, type FacilityAmenityInput, type FacilityFormInput, type FacilityGrade, type FacilityVerificationStatus } from '../types/facility'
 import { coachCertificateSchema, coachDetailSchema, coachSchema, coachStatsSchema, coachSubmissionDetailSchema, coachSubmissionSchema, type AthleteCategory, type CoachCertificateInput, type CoachFormInput, type CoachStatus, type CoachVerificationStatus } from '../types/coach'
 import { officialCertificateSchema, officialDetailSchema, officialSchema, officialStatsSchema, officialSubmissionDetailSchema, officialSubmissionSchema, officialTournamentSchema, type OfficialCertificateInput, type OfficialFormInput, type OfficialLevel, type OfficialRole, type OfficialStatus, type OfficialTournamentInput, type OfficialVerificationStatus } from '../types/official'
@@ -90,6 +90,17 @@ export const api = {
       if (!response.ok) throw new ApiError('Berkas tidak dapat dimuat', response.status)
       return URL.createObjectURL(await response.blob())
     },
+    /**
+     * URL berkas publik, langsung dipakai sebagai `src` gambar.
+     *
+     * Berbeda dari `fetchBlobUrl` yang butuh token, endpoint publik memang
+     * tidak memerlukan autentikasi — jadi tidak perlu diambil sebagai blob.
+     * Server tetap memutuskan sendiri berkas mana yang boleh terbuka; URL ini
+     * hanya alamat, bukan izin.
+     */
+    publicUrl(id: string) {
+      return `${API_BASE_URL}/files/public/${encodeURIComponent(id)}`
+    },
     async uploadPublic(file: File, field: 'photoId' | 'achievementPhotoId' | 'facilityPhoto' | 'amenityPhoto' | 'coachPhoto' | 'coachCertificate' | 'officialPhoto' | 'officialCertificate') {
       const kindByField = { achievementPhotoId: 'achievement', facilityPhoto: 'facility', amenityPhoto: 'amenity', coachPhoto: 'coach', coachCertificate: 'coach-certificate', officialPhoto: 'official', officialCertificate: 'official-certificate', photoId: 'photo' } as const
       const body = new FormData()
@@ -112,6 +123,34 @@ export const api = {
     async createAccount(playerId: string, nik: string, fullName: string) {
       const payload = await request<{ data: unknown }>('/status/create-account', { method: 'POST', body: JSON.stringify({ playerId, nik, fullName }) })
       return payload.data as { email: string; password: string; name: string }
+    },
+    async searchFacilities(q: string) {
+      const query = new URLSearchParams({ q })
+      const payload = await request<{ data: unknown }>(`/status/facilities?${query}`)
+      return facilitySearchResultSchema.parse(payload.data)
+    },
+  },
+  /**
+   * Portal publik — tanpa token. Halaman-halaman ini bisa dibuka siapa saja,
+   * jadi sengaja tidak menerima parameter token sama sekali supaya tidak ada
+   * yang tergoda mengirimkannya "untuk berjaga-jaga".
+   */
+  public: {
+    async player(code: string) {
+      const payload = await request<{ data: unknown }>(`/public/players/${encodeURIComponent(code)}`)
+      return publicPlayerDetailSchema.parse(payload.data)
+    },
+    async coach(code: string) {
+      const payload = await request<{ data: unknown }>(`/public/coaches/${encodeURIComponent(code)}`)
+      return publicCoachDetailSchema.parse(payload.data)
+    },
+    async official(code: string) {
+      const payload = await request<{ data: unknown }>(`/public/officials/${encodeURIComponent(code)}`)
+      return publicOfficialDetailSchema.parse(payload.data)
+    },
+    async facility(code: string) {
+      const payload = await request<{ data: unknown }>(`/public/facilities/${encodeURIComponent(code)}`)
+      return publicFacilityDetailSchema.parse(payload.data)
     },
   },
   players: {

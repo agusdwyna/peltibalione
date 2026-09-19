@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { api, ApiError } from '../../lib/api'
 import { useAuthStore } from '../../stores/auth.store'
 import { useWorkspaceStore } from '../../stores/workspace.store'
 import CoachSpecs from './CoachSpecs'
+import BackLink from '../../components/portal/BackLink'
 import type { CoachSubmissionDetail } from '../../types/coach'
 
 export default function CoachReviewDetailPage() {
@@ -67,9 +68,7 @@ export default function CoachReviewDetailPage() {
   if (!submission)
     return (
       <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8">
-        <Link className="text-sm text-gray-500 hover:text-gray-800" to="/coaches/review">
-          ← Kembali ke review pelatih
-        </Link>
+        <BackLink to="/coaches/review" label="Kembali ke review pelatih" />
         <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {error || 'Pengajuan tidak ditemukan.'}
         </div>
@@ -79,9 +78,7 @@ export default function CoachReviewDetailPage() {
   return (
     <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-6">
-        <Link className="text-sm text-gray-500 hover:text-gray-800 dark:hover:text-gray-200" to="/coaches/review">
-          ← Kembali ke review pelatih
-        </Link>
+        <BackLink to="/coaches/review" label="Kembali ke review pelatih" />
       </div>
       {error && (
         <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">

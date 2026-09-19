@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { District } from '../../types/auth'
 
-type Props = { districts: District[]; disabledCodes?: string[]; onDetail: (district: District) => void; onManage: (district: District) => void; onDoubleClick: (district: District) => void }
+type Props = { districts: District[]; disabledCodes?: string[]; onDetail: (district: District) => void; onManage: (district: District) => void; onDoubleClick: (district: District) => void; /** Batasi tinggi peta pada tinggi wadah (landing full-viewport). */ fit?: boolean }
 type HoveredRegion = { code: string; x: number; y: number }
 
 const sourceTitleToCode: Record<string, string> = { BADUNG: 'BDG', BANGLI: 'BGL', BULELENG: 'BLL', 'KOTA DENPASAR': 'DPS', GIANYAR: 'GYN', JEMBRANA: 'JBR', KARANGASEM: 'KRA', KLUNGKUNG: 'KLG', TABANAN: 'TAB' }
 
 /** Uses the original district SVG source and binds workspace-picker events to its anchors. */
-export default function BaliDistrictMap({ districts, disabledCodes = [], onDetail, onManage, onDoubleClick }: Props) {
+export default function BaliDistrictMap({ districts, disabledCodes = [], onDetail, onManage, onDoubleClick, fit = false }: Props) {
   const mapRef = useRef<HTMLDivElement>(null)
   const closeTimer = useRef<number | null>(null)
   const [markup, setMarkup] = useState('')
@@ -48,7 +48,7 @@ export default function BaliDistrictMap({ districts, disabledCodes = [], onDetai
   const activeDistrict = hovered ? districts.find((district) => district.code === hovered.code) : null
   return <div
     ref={mapRef}
-    className="pelti-map-source relative w-full"
+    className={`pelti-map-source relative w-full ${fit ? 'pelti-map-fit' : ''}`}
     aria-label="Pilih workspace kabupaten atau kota di Bali"
     onPointerOver={(event) => updateHovered(event.target)}
     onPointerOut={(event) => { const next = event.relatedTarget; if (next instanceof Node && event.currentTarget.contains(next)) return; scheduleClose() }}
@@ -71,7 +71,9 @@ export default function BaliDistrictMap({ districts, disabledCodes = [], onDetai
       onDoubleClick(found.district)
     }}
   >
-    <div dangerouslySetInnerHTML={{ __html: markup }} />
+    {/* Dipisahkan dari tooltip: hanya pembungkus ini yang boleh dipaksa
+        setinggi kontainer, supaya kartu hover tidak ikut memanjang. */}
+    <div className="pelti-map-canvas" dangerouslySetInnerHTML={{ __html: markup }} />
     {activeDistrict && hovered && <div className="absolute z-30 -translate-x-1/2 -translate-y-1/2 rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-lg dark:border-gray-700 dark:bg-gray-800" style={{ left: hovered.x, top: hovered.y }} onPointerEnter={clearClose} onPointerLeave={scheduleClose}>
       <p className="whitespace-nowrap text-xs font-semibold text-gray-800 dark:text-gray-100">{activeDistrict.name}</p>
       <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-gray-500"><span>Atlet</span><strong>{activeDistrict._count?.players ?? 0}</strong><span>Pelatih</span><strong>{activeDistrict._count?.coaches ?? 0}</strong><span>Satpras</span><strong>{activeDistrict._count?.facilities ?? 0}</strong><span>Wasit</span><strong>{activeDistrict._count?.referees ?? 0}</strong></div>

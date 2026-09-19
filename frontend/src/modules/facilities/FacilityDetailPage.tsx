@@ -1,10 +1,11 @@
 import { FormEvent, useEffect, useState, type ReactNode } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { api, ApiError } from '../../lib/api'
 import AuthenticatedImage from '../../components/ui/AuthenticatedImage'
 import { useAuthStore } from '../../stores/auth.store'
 import AmenityEditor, { draftsFromFacility, draftsToInput, findUnnamedCustom, type AmenityDraft } from './AmenityEditor'
 import FormRow, { FormField, FormGrid, FormRows, FormSection, SaveRow } from '../../components/portal/FormRow'
+import BackLink from '../../components/portal/BackLink'
 import {
   ACCESS_OPTIONS,
   AMENITY_OPTIONS,
@@ -237,7 +238,7 @@ export default function FacilityDetailPage() {
 
   if (loading) return <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8"><p className="text-sm text-gray-500">Memuat detail…</p></div>
   if (!facility) return <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8">
-    <Link className="text-sm text-gray-500 hover:text-gray-800" to="/facilities">Kembali ke fasilitas lapangan</Link>
+    <BackLink to="/facilities" label="Kembali ke fasilitas lapangan" />
     <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error || 'Lapangan tidak ditemukan.'}</div>
   </div>
 
@@ -306,7 +307,7 @@ export default function FacilityDetailPage() {
   ]
 
   return <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8">
-    <div className="mb-6"><Link className="text-sm font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200" to="/facilities">Kembali ke fasilitas lapangan</Link></div>
+    <div className="mb-6"><BackLink to="/facilities" label="Kembali ke fasilitas lapangan" /></div>
     {error && <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</div>}
     {notice && <div className="mb-5 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700" role="status">{notice}</div>}
 
@@ -377,7 +378,7 @@ export default function FacilityDetailPage() {
 
           {/* ── Tab 1: Informasi Lapangan ───────────────────────── */}
           {tab === 'info' && <form onSubmit={saveInfo}>
-            <FormSection title="Identitas & lokasi" description="Nama, alamat, dan titik lokasi lapangan.">
+            <FormSection title="Identitas & lokasi">
               <FormRows>
                 <FormRow label="Nama lapangan">
                   <input className="form-input w-full sm:max-w-sm" name="name" defaultValue={facility.name} required maxLength={200} />
@@ -394,7 +395,7 @@ export default function FacilityDetailPage() {
               </FormRows>
             </FormSection>
 
-            <FormSection title="Data teknis" description="Ukuran dalam meter, boleh pakai koma.">
+            <FormSection title="Data teknis">
               {/* Kolomnya pendek-pendek dan jumlahnya banyak — disusun grid agar
                   halaman tidak memanjang ke bawah. */}
               <FormGrid>
@@ -449,13 +450,12 @@ export default function FacilityDetailPage() {
               </FormGrid>
             </FormSection>
 
-            <FormSection title={`Foto lapangan (${photos.length})`} description="Perubahan foto langsung tersimpan, tidak menunggu tombol Simpan.">
+            <FormSection title={`Foto lapangan (${photos.length})`} description="Perubahan langsung tersimpan.">
               <div className="mt-4 border-t border-gray-100 pt-5 dark:border-gray-700/60"><PhotoManager /></div>
             </FormSection>
             <SaveRow saving={saving} />
           </form>}
 
-          {/* ── Tab 2: Sarana & Prasarana ───────────────────────── */}
           {/* ── Tab 2: Sarana & Prasarana ───────────────────────── */}
           {/* Satu-satunya tab yang masih memakai mode lihat/sunting: daftar
               centang seluruh fasilitas master terlalu ramai bila selalu
@@ -552,7 +552,7 @@ export default function FacilityDetailPage() {
           {/* ── Tab 3: Operasional ──────────────────────────────── */}
           {tab === 'operational' && <>
             <form onSubmit={saveOperational}>
-              <FormSection title="Pengelola lapangan" description="Penanggung jawab yang bisa dihubungi.">
+              <FormSection title="Pengelola lapangan">
                 <FormRows>
                   <FormRow label="Pengelola / instansi">
                     <input className="form-input w-full sm:max-w-sm" name="managerName" defaultValue={facility.managerName ?? ''} maxLength={200} />
@@ -566,7 +566,7 @@ export default function FacilityDetailPage() {
                 </FormRows>
               </FormSection>
 
-              <FormSection title="Operasional" description="Jam buka, akses, dan tarif sewa.">
+              <FormSection title="Operasional">
                 <FormRows>
                   <FormRow label="Status lapangan">
                     <select className="form-select w-full sm:max-w-[200px]" name="operationalStatus" defaultValue={facility.operationalStatus}>

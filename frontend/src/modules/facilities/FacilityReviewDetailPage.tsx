@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { api, ApiError } from '../../lib/api'
 import AuthenticatedImage from '../../components/ui/AuthenticatedImage'
 import { useAuthStore } from '../../stores/auth.store'
 import { useWorkspaceStore } from '../../stores/workspace.store'
 import FacilitySpecs from './FacilitySpecs'
+import BackLink from '../../components/portal/BackLink'
 import type { FacilityGrade, FacilitySubmissionDetail } from '../../types/facility'
 
 export default function FacilityReviewDetailPage() {
@@ -56,12 +57,12 @@ export default function FacilityReviewDetailPage() {
 
   if (loading) return <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8"><p className="text-sm text-gray-500">Memuat detail…</p></div>
   if (!submission) return <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8">
-    <Link className="text-sm text-gray-500 hover:text-gray-800" to="/facilities/review">← Kembali ke review lapangan</Link>
+    <BackLink to="/facilities/review" label="Kembali ke review lapangan" />
     <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error || 'Pengajuan tidak ditemukan.'}</div>
   </div>
 
   return <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8">
-    <div className="mb-6"><Link className="text-sm text-gray-500 hover:text-gray-800 dark:hover:text-gray-200" to="/facilities/review">← Kembali ke review lapangan</Link></div>
+    <div className="mb-6"><BackLink to="/facilities/review" label="Kembali ke review lapangan" /></div>
     {error && <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</div>}
 
     <section className="rounded-xl bg-white p-6 shadow-xs dark:bg-gray-800 sm:p-8">

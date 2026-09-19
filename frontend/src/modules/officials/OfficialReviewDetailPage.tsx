@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { api, ApiError } from '../../lib/api'
 import { useAuthStore } from '../../stores/auth.store'
 import { useWorkspaceStore } from '../../stores/workspace.store'
 import OfficialSpecs from './OfficialSpecs'
+import BackLink from '../../components/portal/BackLink'
 import type { OfficialSubmissionDetail } from '../../types/official'
 
 export default function OfficialReviewDetailPage() {
@@ -67,9 +68,7 @@ export default function OfficialReviewDetailPage() {
   if (!submission)
     return (
       <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8">
-        <Link className="text-sm text-gray-500 hover:text-gray-800" to="/officials/review">
-          ← Kembali ke review wasit
-        </Link>
+        <BackLink to="/officials/review" label="Kembali ke review wasit" />
         <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {error || 'Pengajuan tidak ditemukan.'}
         </div>
@@ -79,9 +78,7 @@ export default function OfficialReviewDetailPage() {
   return (
     <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-6">
-        <Link className="text-sm text-gray-500 hover:text-gray-800 dark:hover:text-gray-200" to="/officials/review">
-          ← Kembali ke review wasit
-        </Link>
+        <BackLink to="/officials/review" label="Kembali ke review wasit" />
       </div>
       {error && (
         <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">

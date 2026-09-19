@@ -137,6 +137,17 @@
 
   .pelti-map-source { width: 100%; overflow: visible; background: transparent; }
   .pelti-map-source svg { display: block; width: 100%; height: auto; background: transparent; }
+  /* Di landing desktop, peta dibatasi tinggi layar supaya tidak memaksa scroll.
+     preserveAspectRatio bawaan (xMidYMid meet) menjaga proporsi peta.
+     Hanya dari breakpoint lg — di mobile peta tetap mengalir normal. */
+  @media (min-width: 64rem) {
+    /* Hanya pembungkus peta yang direntangkan. Kartu hover (tooltip) juga
+       anak langsung dari .pelti-map-fit, jadi tidak boleh ikut kena. */
+    .pelti-map-fit { height: 100%; }
+    .pelti-map-fit > .pelti-map-canvas { height: 100%; }
+    /* Tinggi yang menentukan skala — lebar mengikuti agar proporsi peta utuh. */
+    .pelti-map-fit svg { width: auto; height: 100%; max-width: 100%; margin: 0 auto; }
+  }
   .pelti-map-source a { cursor: pointer; outline: none !important; text-decoration: none; }
   .pelti-map-source a:focus { outline: none !important; }
   .pelti-map-source a:focus-visible { outline: 2px solid #d4a72c !important; outline-offset: 2px; }
