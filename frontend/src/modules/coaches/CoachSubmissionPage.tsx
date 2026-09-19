@@ -1,9 +1,10 @@
 import { FormEvent, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../../lib/api'
 import { useAuthStore } from '../../stores/auth.store'
 import { useWorkspaceStore } from '../../stores/workspace.store'
 import CoachFormFields, { type CoachPhoto } from './CoachFormFields'
+import BackLink from '../../components/portal/BackLink'
 import { certificateDraftsToInput, findUnnamedCertificate, type CertificateDraft } from '../../components/certificates/CertificateEditor'
 import { readCoachForm, validateCoachForm } from './coach-form'
 
@@ -63,9 +64,7 @@ export default function CoachSubmissionPage() {
   return (
     <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-6">
-        <Link className="text-sm text-gray-500 hover:text-gray-800 dark:hover:text-gray-200" to="/coaches">
-          ← Kembali ke daftar pelatih
-        </Link>
+        <BackLink to="/coaches" label="Kembali ke daftar pelatih" />
       </div>
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 md:text-3xl">Tambah Pelatih</h1>

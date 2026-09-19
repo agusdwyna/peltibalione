@@ -32,7 +32,7 @@ const AGE_GROUPS = [
 ] as const
 
 async function main() {
-  console.log('🌱 Seeding districts...')
+  console.log('[seed] districts')
   for (const d of DISTRICTS) {
     await prisma.district.upsert({
       where: { code: d.code },
@@ -41,7 +41,7 @@ async function main() {
     })
   }
 
-  console.log('🌱 Seeding age groups...')
+  console.log('[seed] age groups')
   for (const ag of AGE_GROUPS) {
     await prisma.ageGroup.upsert({
       where: { code: ag.code },
@@ -50,7 +50,7 @@ async function main() {
     })
   }
 
-  console.log('🌱 Seeding default Central Admin...')
+  console.log('[seed] default central admin')
   const centralPasswordHash = await bcrypt.hash('admin123!', 10)
   const centralAdmin = await prisma.user.upsert({
     where: { email: 'admin@peltibali.id' },
@@ -74,7 +74,7 @@ async function main() {
     })
   }
 
-  console.log('🌱 Seeding District Admin accounts...')
+  console.log('[seed] district admin accounts')
   const districtPasswordHash = await bcrypt.hash('password123', 10)
   for (const districtData of DISTRICTS) {
     const district = await prisma.district.findUniqueOrThrow({ where: { code: districtData.code } })
@@ -101,14 +101,14 @@ async function main() {
     }
   }
 
-  console.log('✅ Seed complete')
+  console.log('[seed] complete')
   console.log('   Central Admin: admin@peltibali.id / admin123!')
   console.log('   District Admins: admin@badung.com, admin@bangli.com, admin@buleleng.com, admin@denpasar.com, admin@gianyar.com, admin@jembrana.com, admin@karangasem.com, admin@klungkung.com, admin@tabanan.com / password123')
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Seed failed:', e)
+    console.error('[seed] failed:', e)
     process.exit(1)
   })
   .finally(() => prisma.$disconnect())

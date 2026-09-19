@@ -22,6 +22,7 @@ import { auditRouter } from './modules/audit/audit.router'
 import { filesRouter } from './modules/files/files.router'
 import { statsRouter } from './modules/stats/stats.router'
 import { statusRouter } from './modules/status/status.router'
+import { publicRouter } from './modules/public/public.router'
 
 const app = express()
 
@@ -61,6 +62,8 @@ app.use('/api/audit', auditRouter)
 app.use('/api/files', filesRouter)
 app.use('/api/stats', statsRouter)
 app.use('/api/status', statusRouter)
+// Portal publik — seluruh permukaan tanpa login dikumpulkan di satu router.
+app.use('/api/public', publicRouter)
 
 // Return JSON for unknown API routes instead of the frontend HTML shell.
 app.use('/api', (_req, res) => {

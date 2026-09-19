@@ -43,3 +43,8 @@ Thumbs.db
 
 # Test and tool caches
 .eslintcache
+
+# Artefak sesi pengujian — dibuat ulang tiap kali harness dijalankan.
+# state.json memuat token form yang masih berlaku, jadi tidak boleh ikut.
+backend/pentest/state.json
+backend/pentest/*.png

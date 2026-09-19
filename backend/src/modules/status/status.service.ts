@@ -5,57 +5,202 @@ import { AppError } from '../../shared/errors/app-error'
 import { writeAuditLog } from '../../shared/utils/audit'
 
 /**
- * Check status pendaftaran pemain by NIK + Nama lengkap (public, no auth).
- * Cari PlayerSubmission → dapat status terkini + playerId jika sudah dibuat.
+ * Peran yang dapat dicari lewat NIK.
+ *
+ * Satpras sengaja tidak termasuk: lapangan itu benda, bukan orang, jadi
+ * identitasnya nama + alamat — bukan NIK. Lihat searchFacilities().
+ */
+export type StatusRole = 'PLAYER' | 'COACH' | 'OFFICIAL'
+
+export type StatusEntry = {
+  role: StatusRole
+  /** Nama sesuai data yang tersimpan, bukan ejaan yang diketik pencari. */
+  fullName: string
+  /** Kode resmi dari master (PL-/CO-/RF-). Kosong bila belum sampai tahap itu. */
+  code: string | null
+  /**
+   * Status verifikasi di tabel master. Pemain memakai PlayerStatus
+   * (VERIFIED/ACTIVE/…), pelatih & wasit memakai TERVERIFIKASI. Kosong bila
+   * pengajuan belum menghasilkan record master.
+   */
+  verification: string | null
+  /** Status pengajuan terakhir — tetap terbaca walau master belum terbentuk. */
+  submissionStatus: string | null
+  district: { name: string; code: string } | null
+  rejectionReason?: string
+  /**
+   * Hanya terisi untuk PLAYER, dan hanya bila record master sudah ada.
+   * Dipakai tombol "Buat Akun" — pembuatan akun mensyaratkan pemain VERIFIED.
+   */
+  playerId?: string
+}
+
+const DISTRICT_SELECT = { select: { name: true, code: true } } as const
+
+/**
+ * Cek status pendaftaran by NIK + Nama lengkap (publik, tanpa autentikasi).
+ *
+ * Satu NIK boleh terdaftar di beberapa peran sekaligus — PRD §4.3 memang
+ * meminta model data mendukung multi-role sejak awal. Karena itu hasilnya
+ * berupa daftar peran, bukan satu status tunggal.
+ *
+ * Untuk tiap peran diperiksa dua sumber: tabel submission (pengajuan yang
+ * mungkin masih menunggu) dan tabel master (pengajuan yang sudah disetujui).
+ * Keduanya diperlukan — pengajuan yang baru masuk belum punya record master,
+ * sedangkan record master hasil migrasi lama bisa saja tanpa submission.
+ *
+ * Nama yang dikembalikan selalu diambil dari data tersimpan, tidak pernah dari
+ * input pencari: kalau ejaan yang diketik dipakai, respons ini jadi alat untuk
+ * menebak ejaan nama pemilik NIK tertentu.
  */
 export async function checkStatus(nik: string, fullName: string) {
-  const submission = await prisma.playerSubmission.findFirst({
-    where: { nik, fullName: { mode: 'insensitive', equals: fullName } },
-    orderBy: { createdAt: 'desc' },
-    select: {
-      id: true,
-      status: true,
-      fullName: true,
-      duplicateMatch: true,
-      playerId: true,
-      rejectionReason: true,
-      createdAt: true,
-    },
-  })
-  if (!submission) {
+  const nameWhere = { nik, fullName: { equals: fullName, mode: 'insensitive' } } as const
+
+  const [playerSubmission, coachSubmission, officialSubmission, player, coach, official] = await Promise.all([
+    prisma.playerSubmission.findFirst({
+      where: nameWhere,
+      orderBy: { createdAt: 'desc' },
+      select: { status: true, fullName: true, rejectionReason: true },
+    }),
+    prisma.coachSubmission.findFirst({
+      where: nameWhere,
+      orderBy: { createdAt: 'desc' },
+      select: { status: true, fullName: true, rejectionReason: true },
+    }),
+    prisma.officialSubmission.findFirst({
+      where: nameWhere,
+      orderBy: { createdAt: 'desc' },
+      select: { status: true, fullName: true, rejectionReason: true },
+    }),
+    prisma.player.findUnique({
+      where: { nik },
+      select: { id: true, playerCode: true, fullName: true, status: true, district: DISTRICT_SELECT },
+    }),
+    prisma.coach.findUnique({
+      where: { nik },
+      select: { coachCode: true, fullName: true, verificationStatus: true, district: DISTRICT_SELECT },
+    }),
+    prisma.official.findUnique({
+      where: { nik },
+      select: { officialCode: true, fullName: true, verificationStatus: true, district: DISTRICT_SELECT },
+    }),
+  ])
+
+  const entries: StatusEntry[] = []
+
+  // Tiap peran punya bentuk yang sama: pakai record master bila ada, jika tidak
+  // jatuh ke pengajuan yang belum disetujui. Perbedaan enum status antar peran
+  // dibiarkan apa adanya — UI yang menerjemahkannya.
+  if (player) {
+    entries.push({
+      role: 'PLAYER',
+      fullName: player.fullName,
+      code: player.playerCode,
+      verification: player.status,
+      submissionStatus: playerSubmission?.status ?? null,
+      district: player.district,
+      rejectionReason: playerSubmission?.rejectionReason ?? undefined,
+      playerId: player.id,
+    })
+  } else if (playerSubmission) {
+    entries.push({
+      role: 'PLAYER',
+      fullName: playerSubmission.fullName,
+      code: null,
+      verification: null,
+      submissionStatus: playerSubmission.status,
+      district: null,
+      rejectionReason: playerSubmission.rejectionReason ?? undefined,
+    })
+  }
+
+  if (coach) {
+    entries.push({
+      role: 'COACH',
+      fullName: coach.fullName,
+      code: coach.coachCode,
+      verification: coach.verificationStatus,
+      submissionStatus: coachSubmission?.status ?? null,
+      district: coach.district,
+      rejectionReason: coachSubmission?.rejectionReason ?? undefined,
+    })
+  } else if (coachSubmission) {
+    entries.push({
+      role: 'COACH',
+      fullName: coachSubmission.fullName,
+      code: null,
+      verification: null,
+      submissionStatus: coachSubmission.status,
+      district: null,
+      rejectionReason: coachSubmission.rejectionReason ?? undefined,
+    })
+  }
+
+  if (official) {
+    entries.push({
+      role: 'OFFICIAL',
+      fullName: official.fullName,
+      code: official.officialCode,
+      verification: official.verificationStatus,
+      submissionStatus: officialSubmission?.status ?? null,
+      district: official.district,
+      rejectionReason: officialSubmission?.rejectionReason ?? undefined,
+    })
+  } else if (officialSubmission) {
+    entries.push({
+      role: 'OFFICIAL',
+      fullName: officialSubmission.fullName,
+      code: null,
+      verification: null,
+      submissionStatus: officialSubmission.status,
+      district: null,
+      rejectionReason: officialSubmission.rejectionReason ?? undefined,
+    })
+  }
+
+  if (entries.length === 0) {
     throw AppError.notFound('Data tidak ditemukan. Periksa kembali NIK dan Nama Lengkap.')
   }
 
-  let playerStatus: string | null = null
-  let playerCode: string | null = null
-  let district: { name: string; code: string } | null = null
-  if (submission.playerId) {
-    const player = await prisma.player.findUnique({
-      where: { id: submission.playerId },
-      select: {
-        status: true,
-        playerCode: true,
-        district: { select: { name: true, code: true } },
-      },
-    })
-    playerStatus = player?.status ?? null
-    if (player) {
-      playerCode = player.playerCode
-      district = player.district
-    }
-  }
+  return { nik, roles: entries }
+}
 
-  return {
-    submissionId: submission.id,
-    fullName: submission.fullName,
-    submissionStatus: submission.status,
-    playerStatus,
-    playerId: submission.playerId,
-    playerCode,
-    district,
-    rejectionReason: submission.rejectionReason ?? undefined,
-    createdAt: submission.createdAt,
-  }
+/**
+ * Pencarian data lapangan untuk publik (publik, tanpa autentikasi).
+ *
+ * Kuncinya nama lapangan, bukan NIK — lapangan tidak punya identitas orang.
+ * Hanya lapangan TERVERIFIKASI yang ditampilkan, sejalan dengan peta publik
+ * dan endpoint overview kabupaten/kota, sehingga data yang masih ditinjau
+ * tidak bocor lewat jalur ini.
+ *
+ * Tidak ada field pribadi di sini: pengelola dan PIC (nama, nomor HP) sengaja
+ * tidak diambil, sama seperti endpoint overview.
+ */
+export async function searchFacilities(query: string) {
+  const facilities = await prisma.facility.findMany({
+    where: {
+      verificationStatus: 'TERVERIFIKASI',
+      OR: [
+        { name: { contains: query, mode: 'insensitive' } },
+        { address: { contains: query, mode: 'insensitive' } },
+      ],
+    },
+    orderBy: { name: 'asc' },
+    take: 20,
+    select: {
+      facilityCode: true,
+      name: true,
+      address: true,
+      courtCount: true,
+      courtType: true,
+      grade: true,
+      openTime: true,
+      closeTime: true,
+      district: DISTRICT_SELECT,
+    },
+  })
+
+  return { query, facilities }
 }
 
 /**

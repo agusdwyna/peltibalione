@@ -1,14 +1,15 @@
-import { Router } from 'express'
+import { Router, type Response, type NextFunction } from 'express'
 import multer from 'multer'
 import rateLimit from 'express-rate-limit'
 import { randomUUID } from 'crypto'
 import path from 'path'
 import { authenticate } from '../../shared/middleware/authenticate'
-import { authorize } from '../../shared/middleware/authorize'
+import { authorize, getDistrictScope, isCentralAdmin } from '../../shared/middleware/authorize'
 import { prisma } from '../../shared/database/prisma'
 import { AppError } from '../../shared/errors/app-error'
 import { env } from '../../config/env'
 import { persistFile } from './files.service'
+import { findFileWithRelations, isPubliclyReadable, owningDistrictId } from './files.access'
 
 // PRD §22 — memory storage with explicit content validation (size limit enforced below),
 // then persisted to object storage/filesystem by the service layer.
@@ -103,6 +104,62 @@ filesRouter.post('/public/upload', publicUploadLimiter, upload.single('file'), a
   }
 })
 
+/**
+ * Kirim isi berkas ke respons. Dipakai bersama jalur publik dan privat supaya
+ * pemeriksaan keamanan jalur (path traversal) tidak mungkin berbeda di antara
+ * keduanya.
+ */
+function streamFile(
+  file: { storageKey: string; mimeType: string },
+  cacheControl: string,
+  res: Response,
+  next: NextFunction,
+) {
+  const dir = path.resolve(env.UPLOAD_DIR)
+  const absolute = path.resolve(dir, file.storageKey)
+  // Jangan pernah biarkan storageKey yang dibuat-buat keluar dari direktori upload.
+  if (!absolute.startsWith(dir)) throw AppError.forbidden('Invalid file path')
+  res.type(file.mimeType || 'application/octet-stream')
+  res.setHeader('Cache-Control', cacheControl)
+  res.sendFile(absolute, (error) => {
+    if (error && !res.headersSent) next(AppError.notFound('File content not found'))
+  })
+}
+
+/**
+ * GET /api/files/public/:id — baca berkas tanpa login (foto lapangan & pelatih/wasit).
+ *
+ * Ditempatkan SEBELUM `use(authenticate)`, jadi rutenya benar-benar publik.
+ * Keputusan boleh-tidaknya ditentukan relasi database (lihat
+ * `files.access.ts`), bukan `entityType` yang berasal dari input klien.
+ *
+ * Berkas yang tidak lolos dijawab 404 — bukan 403 — supaya keberadaannya pun
+ * tidak terungkap. 403 akan memberi tahu penebak bahwa id itu ada.
+ *
+ * Pembatasnya longgar dan terpisah: halaman publik memuat banyak gambar
+ * sekaligus, jadi memakai limiter ketat milik endpoint pencarian akan merusak
+ * penjelajahan normal.
+ */
+const publicFileLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: { code: 'RATE_LIMITED', message: 'Terlalu banyak permintaan berkas. Coba lagi nanti.' } },
+})
+
+filesRouter.get('/public/:id', publicFileLimiter, async (req, res, next) => {
+  try {
+    const id = String(req.params.id)
+    if (!/^[0-9a-fA-F-]{36}$/.test(id)) throw AppError.badRequest('INVALID_ID', 'Invalid file id')
+    const file = await findFileWithRelations(id)
+    if (!file || !isPubliclyReadable(file)) throw AppError.notFound('File not found')
+    streamFile(file, 'public, max-age=3600', res, next)
+  } catch (err) {
+    next(err)
+  }
+})
+
 filesRouter.use(authenticate)
 
 // GET /api/files/:id — stream an uploaded image to an authorized admin session.
@@ -110,17 +167,26 @@ filesRouter.get('/:id', authorize({ roles: ['CENTRAL_ADMIN', 'DISTRICT_ADMIN', '
   try {
     const id = String(req.params.id)
     if (!/^[0-9a-fA-F-]{36}$/.test(id)) throw AppError.badRequest('INVALID_ID', 'Invalid file id')
-    const file = await prisma.file.findUnique({ where: { id } })
+    const file = await findFileWithRelations(id)
     if (!file) throw AppError.notFound('File not found')
-    const dir = path.resolve(env.UPLOAD_DIR)
-    const absolute = path.resolve(dir, file.storageKey)
-    // Never allow escaping the upload directory via a crafted storage key.
-    if (!absolute.startsWith(dir)) throw AppError.forbidden('Invalid file path')
-    res.type(file.mimeType || 'application/octet-stream')
-    res.setHeader('Cache-Control', 'private, max-age=300')
-    res.sendFile(absolute, (error) => {
-      if (error && !res.headersSent) next(AppError.notFound('File content not found'))
-    })
+
+    // Pemeriksaan scope kabupaten.
+    //
+    // Sebelumnya handler ini hanya memeriksa PERAN, sehingga setiap admin
+    // kabupaten dapat mengunduh berkas milik kabupaten lain — cukup dengan
+    // menebak UUID-nya. Model `File` tidak punya kolom `districtId`, jadi
+    // kabupaten pemiliknya diturunkan dari relasi berkasnya.
+    if (!isCentralAdmin(req)) {
+      const ownerDistrictId = owningDistrictId(file)
+      const scope = getDistrictScope(req)
+      const isUploader = Boolean(file.uploadedBy && file.uploadedBy === req.auth?.userId)
+      // Berkas yatim (belum tertaut apa pun) tidak punya kabupaten yang bisa
+      // diverifikasi — hanya pengunggahnya dan admin pusat yang boleh membaca.
+      const allowed = isUploader || Boolean(ownerDistrictId && scope && ownerDistrictId === scope)
+      if (!allowed) throw AppError.forbidden('Berkas di luar wilayah Anda')
+    }
+
+    streamFile(file, 'private, max-age=300', res, next)
   } catch (err) {
     next(err)
   }

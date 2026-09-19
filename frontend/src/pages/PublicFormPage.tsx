@@ -1,10 +1,15 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
+import PublicFormShell from '../components/portal/PublicFormShell'
+import AgeGroupField from '../components/portal/AgeGroupField'
+import FormClosedNotice from './FormClosedNotice'
 import { api } from '../lib/api'
-import type { Gender } from '../types/portal'
+import { FORM_SUBJECT } from '../lib/form-kind'
+import type { AgeGroup, Gender } from '../types/portal'
 
 export default function PublicFormPage() {
   const { token } = useParams<{ token: string }>()
+  const location = useLocation()
   const [form, setForm] = useState<{ id: string; title: string; description?: string | null; district: { name: string } } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -18,6 +23,13 @@ export default function PublicFormPage() {
   const [achievementUploading, setAchievementUploading] = useState(false)
   const submitLock = useRef(false)
 
+  // Kelompok umur hanya ditampilkan, tidak dikirim — server tetap menghitungnya.
+  const [ageGroups, setAgeGroups] = useState<AgeGroup[]>([])
+  // Tanggal lahir & jenis kelamin dikendalikan state supaya kelompok umur bisa
+  // ikut berubah begitu salah satunya diubah.
+  const [birthDate, setBirthDate] = useState('')
+  const [gender, setGender] = useState<Gender | ''>('')
+
   useEffect(() => {
     if (!token) { setError('Token form tidak valid.'); setLoading(false); return }
     Promise.all([
@@ -27,6 +39,8 @@ export default function PublicFormPage() {
       .catch(() => setError('Form tidak ditemukan atau sudah ditutup.'))
       .finally(() => setLoading(false))
   }, [token])
+
+  useEffect(() => { api.ageGroups.list().then(setAgeGroups).catch(() => undefined) }, [])
 
   const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api'
 
@@ -80,6 +94,9 @@ export default function PublicFormPage() {
       })
       setMessage('Pendaftaran berhasil dikirim! Data Anda akan ditinjau oleh admin. Silakan cek status secara berkala melalui halaman Cek Status.')
       form.reset()
+      // Input tanggal lahir & jenis kelamin dikendalikan state, jadi form.reset()
+      // saja tidak cukup — tanpa ini nilainya tetap terisi di layar.
+      setBirthDate(''); setGender('')
       setPhotoId(null); setPhotoPreviewUrl(null); setAchievementPhotoId(null); setAchievementPreviewUrl(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Pengajuan tidak dapat dikirim. Periksa kembali data Anda.')
@@ -87,25 +104,30 @@ export default function PublicFormPage() {
   }
 
   const labelClass = 'mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200'
-  const sectionClass = 'rounded-lg border border-gray-200 bg-gray-50/60 p-5 dark:border-gray-700/60 dark:bg-gray-900/20'
+  const sectionClass = 'rounded-lg border border-gray-200 p-5 dark:border-gray-700/60'
+
+  // Tanpa token artinya form belum dibuka — bukan error, cukup dijelaskan.
+  if (!token) return <FormClosedNotice subject={FORM_SUBJECT.player} districtName={(location.state as { districtName?: string } | null)?.districtName} />
 
   if (loading) return <div className="flex min-h-screen items-center justify-center text-sm text-gray-500">Memuat form…</div>
 
   return (
-    <div className="min-h-screen bg-gray-50 px-4 py-10 dark:bg-gray-900 sm:px-6 lg:px-8">
-      <div className="mx-auto w-full max-w-2xl">
-        <div className="rounded-xl border border-gray-200 bg-white shadow-xs dark:border-gray-700/60 dark:bg-gray-800">
-          <div className="px-6 py-6 sm:px-8">
-            <p className="text-xs uppercase tracking-wide text-gray-400">Form Pendaftaran Pemain</p>
-            <h1 className="mt-1 text-2xl font-bold text-gray-800 dark:text-gray-100">{form?.title ?? 'Pendaftaran Pemain'}</h1>
-            {form?.description && <p className="mt-2 text-sm text-gray-500">{form.description}</p>}
-            {form && <p className="mt-4 inline-block rounded-full bg-violet-500/10 px-2.5 py-1 text-xs font-medium text-violet-700">{form.district.name}</p>}
-          </div>
-
-          {message && <div className="mx-6 mb-4 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700 sm:mx-8" role="status">{message}<a className="mt-2 block font-medium text-green-800 underline hover:text-green-900" href="/check-status">Cek status pendaftaran →</a></div>}
-
-          {!message && form && (
-            <form onSubmit={submit} className="space-y-6 border-t border-gray-100 px-6 py-6 dark:border-gray-700/60 sm:px-8">
+    <PublicFormShell
+      eyebrow="Form Pendaftaran Pemain"
+      title={form?.title ?? 'Pendaftaran Pemain'}
+      description={form?.description}
+      districtName={form?.district.name}
+      asideTitle="Sebelum mengisi"
+      asidePoints={[
+        'Siapkan NIK (16 digit) dan foto diri berukuran maksimal 4MB.',
+        'Kelompok umur ditentukan otomatis dari tanggal lahir dan jenis kelamin.',
+        'Setelah dikirim, cek status verifikasi melalui halaman Cek Status.',
+      ]}
+      message={message}
+      messageAction={<Link className="mt-3 inline-block text-sm font-semibold text-green-800 underline hover:text-green-900 dark:text-green-300" to="/check-status">Cek status pendaftaran →</Link>}
+    >
+      {!message && form && (
+            <form onSubmit={submit} className="space-y-8">
               {error && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</div>}
 
               <section className={sectionClass}>
@@ -114,7 +136,11 @@ export default function PublicFormPage() {
                   <label className="sm:col-span-2"><span className={labelClass}>Nama Lengkap <span className="text-red-500">*</span></span><input className="form-input w-full" name="fullName" required /></label>
                   <label className="sm:col-span-2"><span className={labelClass}>NIK <span className="text-red-500">*</span></span><input className="form-input w-full" name="nik" pattern="\d{16}" title="16 digit angka" required /><span className="mt-1 block text-xs text-gray-500">16 digit, digunakan untuk cek status pendaftaran.</span></label>
                   <label><span className={labelClass}>Tempat Lahir</span><input className="form-input w-full" name="birthPlace" /></label>
-                  <label><span className={labelClass}>Tanggal Lahir <span className="text-red-500">*</span></span><input className="form-input w-full" name="birthDate" type="date" required /></label>
+                  <label><span className={labelClass}>Tanggal Lahir <span className="text-red-500">*</span></span><input className="form-input w-full" name="birthDate" type="date" value={birthDate} onChange={(event) => setBirthDate(event.target.value)} required /></label>
+                  {/* Jenis kelamin sengaja berpasangan dengan tanggal lahir:
+                      keduanya masukan yang menentukan kelompok umur. */}
+                  <label><span className={labelClass}>Jenis Kelamin <span className="text-red-500">*</span></span><select className="form-select w-full" name="gender" value={gender} onChange={(event) => setGender(event.target.value as Gender | '')} required><option value="">Pilih jenis kelamin</option><option value="PUTRA">Laki-laki</option><option value="PUTRI">Perempuan</option></select></label>
+                  <AgeGroupField groups={ageGroups} birthDate={birthDate} gender={gender} />
                   <label className="sm:col-span-2"><span className={labelClass}>Alamat</span><textarea className="form-textarea w-full" name="address" rows={3} /></label>
                 </div>
               </section>
@@ -122,9 +148,8 @@ export default function PublicFormPage() {
               <section className={sectionClass}>
                 <div className="mb-5"><h2 className="font-semibold text-gray-800 dark:text-gray-100">Kategori & Kontak</h2><p className="mt-1 text-xs text-gray-500">Kelompok umur ditentukan otomatis dari tanggal lahir &amp; jenis kelamin.</p></div>
                 <div className="grid gap-5 sm:grid-cols-2">
-                  <label><span className={labelClass}>Jenis Kelamin <span className="text-red-500">*</span></span><select className="form-select w-full" name="gender" required><option value="">Pilih jenis kelamin</option><option value="PUTRA">Laki-laki</option><option value="PUTRI">Perempuan</option></select></label>
                   <label><span className={labelClass}>No. WhatsApp <span className="text-red-500">*</span></span><input className="form-input w-full" name="whatsapp" type="tel" required placeholder="08xxxxxxxxxx" /></label>
-                  <label className="sm:col-span-2"><span className={labelClass}>Akun Instagram Aktif <span className="text-red-500">*</span></span><input className="form-input w-full" name="instagram" required placeholder="@username" /></label>
+                  <label><span className={labelClass}>Akun Instagram Aktif <span className="text-red-500">*</span></span><input className="form-input w-full" name="instagram" required placeholder="@username" /></label>
                   <label><span className={labelClass}>Peringkat PNP (Juni 2026) <span className="font-normal text-gray-400">(opsional)</span></span><input className="form-input w-full" name="pnpRank" type="number" min="1" placeholder="Peringkat" /></label>
                 </div>
               </section>
@@ -148,12 +173,10 @@ export default function PublicFormPage() {
               </section>
 
               <div className="flex justify-end border-t border-gray-100 pt-6 dark:border-gray-700/60">
-                <button className="btn bg-gray-900 text-gray-100 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={submitting || photoUploading || achievementUploading}>{submitting ? 'Mengirim…' : 'Kirim Pengajuan'}</button>
+                <button className="btn bg-gray-900 px-5 text-sm text-gray-100 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900" type="submit" disabled={submitting || photoUploading || achievementUploading}>{submitting ? 'Mengirim…' : 'Kirim Pengajuan'}</button>
               </div>
             </form>
-          )}
-        </div>
-      </div>
-    </div>
+      )}
+    </PublicFormShell>
   )
 }

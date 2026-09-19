@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../../lib/api'
 import { useAuthStore } from '../../stores/auth.store'
 import { useWorkspaceStore } from '../../stores/workspace.store'
 import PortalPagination from '../../components/portal/PortalPagination'
 import PortalToolbar from '../../components/portal/PortalToolbar'
+import BackLink from '../../components/portal/BackLink'
 import { formatExperience, joinLabels, officialRoleLabel, officialStatusLabel } from '../../types/official'
 
 const statusLabel: Record<string, string> = { SUBMITTED: 'Menunggu', UNDER_REVIEW: 'Dalam tinjauan' }
@@ -56,9 +57,7 @@ export default function OfficialReviewPage() {
   return (
     <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-8">
-        <Link className="mb-4 inline-block text-sm text-gray-500 hover:text-gray-800 dark:hover:text-gray-200" to="/officials">
-          ← Kembali ke daftar wasit
-        </Link>
+        <BackLink className="mb-4" to="/officials" label="Kembali ke daftar wasit" />
         <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 md:text-3xl">Review Wasit</h1>
         <p className="mt-2 text-sm text-gray-500">
           Tinjau pengajuan pendataan wasit, lalu setujui dengan status verifikasi, atau tolak dengan catatan.

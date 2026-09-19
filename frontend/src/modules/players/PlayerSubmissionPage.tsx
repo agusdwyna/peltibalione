@@ -1,8 +1,9 @@
-import { FormEvent, useRef, useState } from 'react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import { api } from '../../lib/api'
+import AgeGroupField from '../../components/portal/AgeGroupField'
 import { useAuthStore } from '../../stores/auth.store'
 import { useWorkspaceStore } from '../../stores/workspace.store'
-import type { Gender } from '../../types/portal'
+import type { AgeGroup, Gender } from '../../types/portal'
 
 export default function PlayerSubmissionPage() {
   const token = useAuthStore((state) => state.token)
@@ -17,6 +18,13 @@ export default function PlayerSubmissionPage() {
   const [achievementPhotoId, setAchievementPhotoId] = useState<string | null>(null)
   const [achievementPreviewUrl, setAchievementPreviewUrl] = useState<string | null>(null)
   const submitLock = useRef(false)
+
+  // Kelompok umur hanya ditampilkan; server tetap yang menghitung.
+  const [ageGroups, setAgeGroups] = useState<AgeGroup[]>([])
+  const [birthDate, setBirthDate] = useState('')
+  const [gender, setGender] = useState<Gender | ''>('')
+
+  useEffect(() => { api.ageGroups.list().then(setAgeGroups).catch(() => undefined) }, [])
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -51,6 +59,9 @@ export default function PlayerSubmissionPage() {
       })
       setMessage(`Pengajuan berhasil dikirim. Duplikat: ${result.duplicateMatch}.`)
       form.reset()
+      // Tanggal lahir & jenis kelamin dikendalikan state, jadi form.reset()
+      // saja tidak mengosongkannya di layar.
+      setBirthDate(''); setGender('')
       setPhotoId(null); setPhotoPreviewUrl(null); setAchievementPhotoId(null); setAchievementPreviewUrl(null)
     } catch {
       setError('Pengajuan tidak dapat dikirim. Pastikan ada form aktif dan data benar.')
@@ -78,7 +89,13 @@ export default function PlayerSubmissionPage() {
               <label className="sm:col-span-2"><span className={labelClass}>Nama Lengkap <span className="text-red-500">*</span></span><input className="form-input w-full" name="fullName" required /></label>
               <label className="sm:col-span-2"><span className={labelClass}>NIK <span className="text-red-500">*</span></span><input className="form-input w-full" name="nik" pattern="\d{16}" title="16 digit" required /><span className="mt-1 block text-xs text-gray-500">16 digit.</span></label>
               <label><span className={labelClass}>Tempat Lahir</span><input className="form-input w-full" name="birthPlace" /></label>
-              <label><span className={labelClass}>Tanggal Lahir <span className="text-red-500">*</span></span><input className="form-input w-full" name="birthDate" type="date" required /></label>
+              <label><span className={labelClass}>Tanggal Lahir <span className="text-red-500">*</span></span><input className="form-input w-full" name="birthDate" type="date" value={birthDate} onChange={(event) => setBirthDate(event.target.value)} required /></label>
+              {/* Jenis kelamin berpasangan dengan tanggal lahir — keduanya
+                  masukan yang menentukan kelompok umur di bawahnya. */}
+              <label><span className={labelClass}>Jenis Kelamin <span className="text-red-500">*</span></span>
+                <select className="form-select w-full" name="gender" value={gender} onChange={(event) => setGender(event.target.value as Gender | '')} required><option value="">Pilih jenis kelamin</option><option value="PUTRA">Laki-laki</option><option value="PUTRI">Perempuan</option></select>
+              </label>
+              <AgeGroupField groups={ageGroups} birthDate={birthDate} gender={gender} />
               <label className="sm:col-span-2"><span className={labelClass}>Alamat</span><textarea className="form-textarea w-full" name="address" rows={3} /></label>
             </div>
           </section>
@@ -86,11 +103,8 @@ export default function PlayerSubmissionPage() {
           <section className={sectionClass}>
             <div className="mb-5"><h2 className="font-semibold text-gray-800 dark:text-gray-100">Kategori & Kontak</h2></div>
             <div className="grid gap-5 sm:grid-cols-2">
-              <label><span className={labelClass}>Jenis Kelamin <span className="text-red-500">*</span></span>
-                <select className="form-select w-full" name="gender" required><option value="">Pilih jenis kelamin</option><option value="PUTRA">Laki-laki</option><option value="PUTRI">Perempuan</option></select>
-              </label>
               <label><span className={labelClass}>No. WhatsApp <span className="text-red-500">*</span></span><input className="form-input w-full" name="whatsapp" type="tel" required /></label>
-              <label className="sm:col-span-2"><span className={labelClass}>Akun Instagram <span className="text-red-500">*</span></span><input className="form-input w-full" name="instagram" required /></label>
+              <label><span className={labelClass}>Akun Instagram <span className="text-red-500">*</span></span><input className="form-input w-full" name="instagram" required /></label>
               <label><span className={labelClass}>Peringkat PNP (opsional)</span><input className="form-input w-full" name="pnpRank" type="number" min="1" /></label>
             </div>
           </section>

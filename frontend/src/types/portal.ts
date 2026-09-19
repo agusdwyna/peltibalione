@@ -126,17 +126,186 @@ export type AgeGroup = z.infer<typeof ageGroupSchema>
 
 export const publicDistrictOverviewSchema = z.object({
   district: z.object({ id: z.string(), code: z.string(), name: z.string(), officialPlayerCount: z.number() }),
-  players: z.array(z.object({ playerCode: z.string(), fullName: z.string() })),
+  players: z.array(z.object({
+    playerCode: z.string(), fullName: z.string(),
+    gender: z.string().nullable().optional(), ageGroup: z.string().nullable().optional(),
+    status: z.string().optional(), clubName: z.string().nullable().optional(),
+    pnpRank: z.number().nullable().optional(), pnpPeriod: z.string().nullable().optional(),
+  })),
+  facilities: z.array(z.object({
+    facilityCode: z.string(), name: z.string(), address: z.string().optional(),
+    courtCount: z.number().optional(), courtType: z.string().optional(),
+    grade: z.string().nullable().optional(), openTime: z.string().nullable().optional(), closeTime: z.string().nullable().optional(),
+    /** Foto lapangan publik; dipakai kartu di halaman kabupaten. */
+    coverPhotoId: z.string().nullable().optional(),
+  })).optional(),
+  coaches: z.array(z.object({
+    coachCode: z.string(), fullName: z.string(), clubName: z.string().nullable().optional(),
+    coachingSince: z.number().nullable().optional(), specializations: z.array(z.string()).optional(),
+    photoId: z.string().nullable().optional(),
+  })).optional(),
+  officials: z.array(z.object({
+    officialCode: z.string(), fullName: z.string(), level: z.string().nullable().optional(),
+    officiatingSince: z.number().nullable().optional(), roles: z.array(z.string()).optional(),
+    photoId: z.string().nullable().optional(),
+  })).optional(),
+  /** Token form aktif per jenis — dipakai tombol Daftar di halaman detail publik. */
+  registrationForms: z.object({
+    player: z.string().nullable(), facility: z.string().nullable(),
+    coach: z.string().nullable(), official: z.string().nullable(),
+  }).optional(),
 })
 export type PublicDistrictOverview = z.infer<typeof publicDistrictOverviewSchema>
 
+export const statusRoleSchema = z.enum(['PLAYER', 'COACH', 'OFFICIAL'])
+export type StatusRole = z.infer<typeof statusRoleSchema>
+
+/**
+ * Satu peran yang ditemukan dari pencarian NIK. Satu NIK bisa memunculkan
+ * beberapa entri sekaligus — orang yang jadi pemain dan pelatih punya dua baris.
+ */
+export const statusEntrySchema = z.object({
+  role: statusRoleSchema,
+  fullName: z.string(),
+  /** Kode resmi (PL-/CO-/RF-). Kosong selama pengajuan belum disetujui. */
+  code: z.string().nullable(),
+  /**
+   * Status di tabel master. Pemain memakai PlayerStatus, pelatih & wasit
+   * memakai TERVERIFIKASI. Kosong bila record master belum terbentuk.
+   */
+  verification: z.string().nullable(),
+  /** Status pengajuan terakhir — terbaca walau master belum terbentuk. */
+  submissionStatus: z.string().nullable(),
+  district: z.object({ name: z.string(), code: z.string() }).nullable(),
+  rejectionReason: z.string().optional(),
+  /** Hanya ada untuk pemain yang sudah punya record master. */
+  playerId: z.string().optional(),
+})
+export type StatusEntry = z.infer<typeof statusEntrySchema>
+
 export const checkStatusResultSchema = z.object({
-  submissionId: z.string(), fullName: z.string(), submissionStatus: z.string(),
-  playerStatus: z.string().nullable(), playerId: z.string().nullable(),
-  playerCode: z.string().nullable(), district: z.object({ name: z.string(), code: z.string() }).nullable(),
-  rejectionReason: z.string().optional(), createdAt: z.string(),
+  nik: z.string(),
+  roles: z.array(statusEntrySchema),
 })
 export type CheckStatusResult = z.infer<typeof checkStatusResultSchema>
+
+export const facilitySearchResultSchema = z.object({
+  query: z.string(),
+  facilities: z.array(z.object({
+    facilityCode: z.string(), name: z.string(), address: z.string(),
+    courtCount: z.number(), courtType: z.string(),
+    grade: z.string().nullable().optional(),
+    openTime: z.string().nullable().optional(), closeTime: z.string().nullable().optional(),
+    district: z.object({ name: z.string(), code: z.string() }).nullable(),
+  })),
+})
+export type FacilitySearchResult = z.infer<typeof facilitySearchResultSchema>
+
+// ── Detail publik per entitas ────────────────────────────────────────────
+// Skema ini sengaja TIDAK memuat field pribadi apa pun (NIK, tanggal lahir,
+// alamat, kontak). Server memang tidak pernah mengirimnya; ketiadaan field di
+// sini membuat kalau suatu saat server salah mengirim, `parse` akan menolak
+// alih-alih diam-diam menampilkannya.
+
+/** Label prestasi & kategori — dipakai bersama halaman admin dan portal publik. */
+export const ACHIEVEMENT_RESULT_LABELS: Record<string, string> = {
+  PARTICIPANT: 'Peserta', CHAMPION_3: 'Juara 3', CHAMPION_2: 'Juara 2', CHAMPION_1: 'Juara 1',
+  juara_1: 'Juara 1', juara_2: 'Juara 2', juara_3: 'Juara 3', peserta: 'Peserta',
+}
+export const ACHIEVEMENT_CATEGORY_LABELS: Record<string, string> = {
+  competition: 'Kompetisi', training: 'Pelatihan', other: 'Lainnya',
+}
+
+const publicDistrictRef = z.object({ name: z.string(), code: z.string() })
+
+export const publicPlayerDetailSchema = z.object({
+  playerCode: z.string(), fullName: z.string(),
+  gender: z.string().nullable().optional(),
+  ageGroup: z.string().nullable().optional(),
+  /** Umur menurut selisih tahun — rumus yang sama dengan kelompok umur. */
+  age: z.number().nullable().optional(),
+  status: z.string(),
+  district: publicDistrictRef,
+  clubName: z.string().nullable().optional(),
+  pnpRankings: z.array(z.object({ rank: z.number(), period: z.string() })),
+  achievements: z.array(z.object({
+    title: z.string(), eventName: z.string().nullable().optional(),
+    category: z.string().nullable().optional(), result: z.string().nullable().optional(),
+    /** Tahun saja — tanggal persis sengaja tidak pernah dikirim server. */
+    year: z.number().nullable().optional(),
+  })),
+  certificates: z.array(z.object({
+    title: z.string(), issuer: z.string().nullable().optional(), year: z.number().nullable().optional(),
+  })),
+})
+export type PublicPlayerDetail = z.infer<typeof publicPlayerDetailSchema>
+
+export const publicCoachDetailSchema = z.object({
+  coachCode: z.string(), fullName: z.string(), gender: z.string().nullable().optional(),
+  coachStatus: z.string(), coachingSince: z.number().nullable().optional(),
+  experienceYears: z.number().nullable().optional(),
+  clubName: z.string().nullable().optional(),
+  athleteCategories: z.array(z.string()), activeAthletes: z.number().nullable().optional(),
+  specializations: z.array(z.string()), otherSpecialization: z.string().nullable().optional(),
+  acceptingNewAthletes: z.boolean(), experience: z.string().nullable().optional(),
+  photoId: z.string().nullable().optional(), district: publicDistrictRef,
+  certificates: z.array(z.object({
+    name: z.string(), level: z.string().nullable().optional(),
+    issuer: z.string().nullable().optional(), year: z.number().nullable().optional(),
+  })),
+})
+export type PublicCoachDetail = z.infer<typeof publicCoachDetailSchema>
+
+export const publicOfficialDetailSchema = z.object({
+  officialCode: z.string(), fullName: z.string(), gender: z.string().nullable().optional(),
+  officialStatus: z.string(), officiatingSince: z.number(),
+  experienceYears: z.number().nullable().optional(),
+  roles: z.array(z.string()), level: z.string().nullable().optional(),
+  acceptingAssignments: z.boolean(), experience: z.string().nullable().optional(),
+  photoId: z.string().nullable().optional(), district: publicDistrictRef,
+  tournaments: z.array(z.object({
+    name: z.string(), year: z.number().nullable().optional(),
+    level: z.string().nullable().optional(), role: z.string().nullable().optional(),
+    location: z.string().nullable().optional(),
+  })),
+  certificates: z.array(z.object({
+    name: z.string(), level: z.string().nullable().optional(),
+    issuer: z.string().nullable().optional(), year: z.number().nullable().optional(),
+  })),
+})
+export type PublicOfficialDetail = z.infer<typeof publicOfficialDetailSchema>
+
+export const publicFacilityDetailSchema = z.object({
+  facilityCode: z.string(), name: z.string(), address: z.string(),
+  mapsUrl: z.string().nullable().optional(), description: z.string().nullable().optional(),
+  latitude: z.number().nullable().optional(), longitude: z.number().nullable().optional(),
+
+  courtCount: z.number(), courtType: z.string(), surface: z.string(),
+  courtLength: z.number().nullable().optional(), courtWidth: z.number().nullable().optional(),
+  clearanceBack: z.number().nullable().optional(), clearanceLeft: z.number().nullable().optional(),
+  clearanceRight: z.number().nullable().optional(),
+  surfaceCondition: z.string(), hasLighting: z.boolean(), lightCount: z.number().nullable().optional(),
+  netCondition: z.string(),
+
+  operationalStatus: z.string(), openTime: z.string().nullable().optional(),
+  closeTime: z.string().nullable().optional(), accessType: z.string(),
+  hourlyRate: z.number().nullable().optional(),
+
+  grade: z.string().nullable().optional(),
+  district: publicDistrictRef,
+
+  /** Satu-satunya kontak yang tampil publik — kontak tempat usaha. */
+  managerName: z.string().nullable().optional(), picName: z.string().nullable().optional(),
+  picPhone: z.string().nullable().optional(),
+
+  coverPhotoId: z.string().nullable().optional(),
+  photoIds: z.array(z.string()),
+  amenities: z.array(z.object({
+    code: z.string(), customName: z.string().nullable().optional(),
+    description: z.string().nullable().optional(), photoIds: z.array(z.string()),
+  })),
+})
+export type PublicFacilityDetail = z.infer<typeof publicFacilityDetailSchema>
 
 export const publicSubmissionSchema = z.object({
   formToken: z.string().min(1), fullName: z.string().min(1), birthPlace: z.string().optional(), birthDate: z.string().min(1),

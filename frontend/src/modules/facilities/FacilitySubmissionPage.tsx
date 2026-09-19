@@ -1,9 +1,10 @@
 import { FormEvent, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../../lib/api'
 import { useAuthStore } from '../../stores/auth.store'
 import { useWorkspaceStore } from '../../stores/workspace.store'
 import FacilityFormFields, { type FacilityPhoto } from './FacilityFormFields'
+import BackLink from '../../components/portal/BackLink'
 import { draftsToInput, findUnnamedCustom, type AmenityDraft } from './AmenityEditor'
 import { readFacilityForm } from './facility-form'
 
@@ -45,7 +46,7 @@ export default function FacilitySubmissionPage() {
 
   return (
     <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mb-6"><Link className="text-sm text-gray-500 hover:text-gray-800 dark:hover:text-gray-200" to="/facilities">← Kembali ke fasilitas lapangan</Link></div>
+      <div className="mb-6"><BackLink to="/facilities" label="Kembali ke fasilitas lapangan" /></div>
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100 md:text-3xl">Tambah Lapangan</h1>
         <p className="mt-2 text-sm text-gray-500">Masuk sebagai pengajuan, lalu diverifikasi di Review Lapangan.</p>

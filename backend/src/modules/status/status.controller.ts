@@ -1,11 +1,21 @@
 import { Request, Response, NextFunction } from 'express'
-import { checkStatusSchema, createAccountSchema } from './status.schema'
+import { checkStatusSchema, createAccountSchema, searchFacilitiesSchema } from './status.schema'
 import * as statusService from './status.service'
 
 export async function check(req: Request, res: Response, next: NextFunction) {
   try {
     const query = checkStatusSchema.parse(req.query)
     const result = await statusService.checkStatus(query.nik, query.fullName)
+    res.json({ data: result })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function searchFacilities(req: Request, res: Response, next: NextFunction) {
+  try {
+    const query = searchFacilitiesSchema.parse(req.query)
+    const result = await statusService.searchFacilities(query.q)
     res.json({ data: result })
   } catch (err) {
     next(err)

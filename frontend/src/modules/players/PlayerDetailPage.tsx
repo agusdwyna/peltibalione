@@ -1,10 +1,11 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { api, ApiError } from '../../lib/api'
-import { formatAgeGroup } from '../../lib/age-group'
+import { ageGroupLabel, formatAgeGroup, resolveAgeGroup } from '../../lib/age-group'
 import AuthenticatedImage from '../../components/ui/AuthenticatedImage'
+import BackLink from '../../components/portal/BackLink'
 import { useAuthStore } from '../../stores/auth.store'
-import type { PlayerDetail, PnpRanking, TrackRecord } from '../../types/portal'
+import type { AgeGroup, PlayerDetail, PnpRanking, TrackRecord } from '../../types/portal'
 
 const statusLabel: Record<string, string> = {
   VERIFIED: 'Terverifikasi',
@@ -113,6 +114,22 @@ function PersonalRow({ label, value, hint, mono = false, children }: { label: st
   return <div className="flex flex-col gap-1.5 py-3 sm:flex-row sm:items-center sm:gap-6"><dt className="shrink-0 text-sm font-medium text-gray-500 sm:w-48">{label}</dt><dd className={`min-w-0 flex-1 text-sm text-gray-800 dark:text-gray-100 ${mono ? 'font-mono' : ''}`}>{children ?? <span>{value || '—'}</span>}{hint && <span className="ml-2 text-xs font-normal text-gray-400">{hint}</span>}</dd></div>
 }
 
+/**
+ * Kelompok umur dari halaman detail: ditampilkan sebagai bacaan, bukan isian.
+ *
+ * Berbeda dari `AgeGroupField` pada form pendaftaran, di sini kelompok umur
+ * memang sudah dimiliki pemain (tersimpan di data). Yang ditampilkan adalah
+ * hasil hitung ulang dari data diri yang sedang diedit — supaya admin langsung
+ * melihat kelompok mana yang akan dipakai bila perubahan disimpan. Untuk
+ * pemain dewasa, nilai tersimpan ditampilkan apa adanya.
+ */
+function KelompokUmurField({ groups, birthDate, gender }: { groups: AgeGroup[]; birthDate: string; gender: PersonalForm['gender'] }) {
+  const resolved = resolveAgeGroup(groups, birthDate || null, gender || null)
+  return <span className="text-gray-800 dark:text-gray-100">
+    {resolved ? ageGroupLabel(resolved) : <span className="text-gray-400">Tidak ada kelompok umur untuk umur ini</span>}
+  </span>
+}
+
 function StatusBadge({ status }: { status: string }) {
   return <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${statusClass[status] ?? statusClass.INACTIVE}`}>{statusLabel[status] ?? status}</span>
 }
@@ -158,6 +175,9 @@ export default function PlayerDetailPage() {
   const [transferOpen, setTransferOpen] = useState(false)
   const [targetDistrict, setTargetDistrict] = useState('')
   const [districts, setDistricts] = useState<import('../../types/auth').District[]>([])
+  // Master kelompok umur — dipakai untuk menghitung ulang tampilan saat data
+  // diri diubah, bukan untuk menyimpan nilai.
+  const [ageGroups, setAgeGroups] = useState<AgeGroup[]>([])
   const [transferMessage, setTransferMessage] = useState('')
   const [savingTransfer, setSavingTransfer] = useState(false)
   const isAdmin = useAuthStore((state) => state.user)?.roles.some((role) => role.role === 'CENTRAL_ADMIN' || role.role === 'DISTRICT_ADMIN') ?? false
@@ -181,6 +201,9 @@ export default function PlayerDetailPage() {
   }
 
   useEffect(reload, [playerId, token]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Master kelompok umur jarang berubah, jadi cukup diambil sekali.
+  useEffect(() => { api.ageGroups.list().then(setAgeGroups).catch(() => undefined) }, [])
 
   const closeModal = () => { if (!saving) { setModal(null); setEditingId(null); setFormError('') } }
 
@@ -292,7 +315,7 @@ export default function PlayerDetailPage() {
   }
 
   if (loading) return <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8"><p className="text-sm text-gray-500">Memuat detail pemain...</p></div>
-  if (error || !player) return <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8"><Link className="text-sm font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200" to="/players">Kembali ke daftar pemain</Link><div className="mt-8 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">{error || 'Pemain tidak ditemukan.'}</div></div>
+  if (error || !player) return <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8"><BackLink to="/players" label="Kembali ke daftar pemain" /><div className="mt-8 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">{error || 'Pemain tidak ditemukan.'}</div></div>
 
   const tabs: Array<[Tab, string]> = [['profile', 'Informasi pribadi'], ['ranking', 'Peringkat PNP'], ['records', 'Riwayat prestasi']]
   const age = ageFrom(player.birthDate)
@@ -311,7 +334,7 @@ export default function PlayerDetailPage() {
   ]
 
   return <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8">
-    <div className="mb-6 flex items-center gap-4"><Link className="text-sm font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200" to="/players">Kembali ke daftar pemain</Link></div>
+    <div className="mb-6"><BackLink to="/players" label="Kembali ke daftar pemain" /></div>
     {error && <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</div>}
     {transferMessage && <div className="mb-5 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700" role="status">{transferMessage}</div>}
 
@@ -355,19 +378,22 @@ export default function PlayerDetailPage() {
             {personalMessage && <div className="mb-5 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700" role="status">{personalMessage}</div>}
 
             <section>
-              <div><h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Data diri</h2><p className="mt-1 text-sm text-gray-500">Identitas dasar pemain. Perubahan NIK atau jenis kelamin memerlukan konfirmasi.</p></div>
+              <div><h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Data diri</h2></div>
               <div className="mt-4 divide-y divide-gray-100 border-t border-gray-100 pt-1 dark:divide-gray-700/60 dark:border-gray-700/60">
                 <PersonalRow label="Nama lengkap"><input className={`${fieldClass} sm:max-w-sm`} value={personalForm.fullName} onChange={(event) => setPersonalForm({ ...personalForm, fullName: event.target.value })} required /></PersonalRow>
-                <PersonalRow label="NIK" hint={isAdmin ? 'Dapat diubah dengan konfirmasi' : undefined}><input className={`${fieldClass} sm:max-w-[220px] font-mono`} value={personalForm.nik} inputMode="numeric" pattern="\d{16}" maxLength={16} onChange={(event) => setPersonalForm({ ...personalForm, nik: event.target.value.replace(/\D/g, '') })} /></PersonalRow>
-                <PersonalRow label="Jenis kelamin" hint="Menentukan jalur PA/PI kelompok umur"><select className={`${fieldClass} sm:max-w-[200px]`} value={personalForm.gender} onChange={(event) => setPersonalForm({ ...personalForm, gender: event.target.value as PersonalForm['gender'] })}><option value="">Belum diisi</option><option value="PUTRA">Laki-laki</option><option value="PUTRI">Perempuan</option></select></PersonalRow>
-                <PersonalRow label="Kelompok umur" value={formatAgeGroup(player.ageGroup, personalForm.gender || null)} hint="Otomatis dari tanggal lahir & jenis kelamin" />
+                <PersonalRow label="NIK" hint={isAdmin ? 'Perubahan perlu konfirmasi' : undefined}><input className={`${fieldClass} sm:max-w-[220px] font-mono`} value={personalForm.nik} inputMode="numeric" pattern="\d{16}" maxLength={16} onChange={(event) => setPersonalForm({ ...personalForm, nik: event.target.value.replace(/\D/g, '') })} /></PersonalRow>
+                <PersonalRow label="Jenis kelamin"><select className={`${fieldClass} sm:max-w-[200px]`} value={personalForm.gender} onChange={(event) => setPersonalForm({ ...personalForm, gender: event.target.value as PersonalForm['gender'] })}><option value="">Belum diisi</option><option value="PUTRA">Laki-laki</option><option value="PUTRI">Perempuan</option></select></PersonalRow>
+                {/* Kelompok umur diturunkan, bukan disimpan: nilainya ikut berubah
+                    begitu tanggal lahir atau jenis kelamin diubah, dan ikut
+                    menyesuaikan sendiri saat umur pemain bertambah. */}
+                <PersonalRow label="Kelompok umur" hint="Otomatis"><KelompokUmurField groups={ageGroups} birthDate={personalForm.birthDate} gender={personalForm.gender} /></PersonalRow>
                 <PersonalRow label="Tempat lahir"><input className={fieldClass} value={personalForm.birthPlace} onChange={(event) => setPersonalForm({ ...personalForm, birthPlace: event.target.value })} /></PersonalRow>
                 <PersonalRow label="Tanggal lahir"><input className={`${fieldClass} sm:max-w-[200px]`} type="date" value={personalForm.birthDate} onChange={(event) => setPersonalForm({ ...personalForm, birthDate: event.target.value })} /></PersonalRow>
               </div>
             </section>
 
             <section className="mt-8">
-              <div><h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Kontak</h2><p className="mt-1 text-sm text-gray-500">Alamat dan kanal komunikasi pemain.</p></div>
+              <div><h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Kontak</h2></div>
               <div className="mt-4 divide-y divide-gray-100 border-t border-gray-100 pt-1 dark:divide-gray-700/60 dark:border-gray-700/60">
                 <PersonalRow label="Alamat"><textarea className="form-textarea w-full sm:max-w-md" rows={2} value={personalForm.address} onChange={(event) => setPersonalForm({ ...personalForm, address: event.target.value })} /></PersonalRow>
                 <PersonalRow label="Telepon"><input className={`${fieldClass} sm:max-w-xs`} type="tel" value={personalForm.phone} onChange={(event) => setPersonalForm({ ...personalForm, phone: event.target.value })} /></PersonalRow>
@@ -379,7 +405,7 @@ export default function PlayerDetailPage() {
             <section className="mt-8">
               {/* Kabupaten, klub, kode pemain, dan kelompok umur sengaja tidak
                   diulang di sini — semuanya sudah tampil di ringkasan atas. */}
-              <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Registrasi olahraga</h2><p className="mt-1 text-sm text-gray-500">Afiliasi pemain saat ini: <span className="font-medium text-gray-700 dark:text-gray-200">{player.district.name}</span>. Perpindahan kabupaten perlu disetujui kabupaten tujuan.</p></div>{isAdmin && <button type="button" className="btn border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200" onClick={openTransfer}>Transfer kabupaten</button>}</div>
+              <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Registrasi olahraga</h2><p className="mt-1 text-sm text-gray-500">Afiliasi saat ini: <span className="font-medium text-gray-700 dark:text-gray-200">{player.district.name}</span></p></div>{isAdmin && <button type="button" className="btn border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200" onClick={openTransfer}>Transfer kabupaten</button>}</div>
               <div className="mt-4 border-t border-gray-100 pt-4 dark:border-gray-700/60">
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Riwayat perpindahan</p>
                 {(player.districtHistory ?? []).length > 0

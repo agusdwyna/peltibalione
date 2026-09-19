@@ -1,10 +1,11 @@
 import { FormEvent, useEffect, useState, type ReactNode } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { api, ApiError } from '../../lib/api'
 import AuthenticatedImage from '../../components/ui/AuthenticatedImage'
 import { useAuthStore } from '../../stores/auth.store'
 import CertificateTable from '../../components/certificates/CertificateTable'
 import FormRow, { FormRows, FormSection, SaveRow } from '../../components/portal/FormRow'
+import BackLink from '../../components/portal/BackLink'
 import {
   ATHLETE_CATEGORY_OPTIONS,
   COACH_STATUS_OPTIONS,
@@ -225,9 +226,7 @@ export default function CoachDetailPage() {
   if (!coach)
     return (
       <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8">
-        <Link className="text-sm text-gray-500 hover:text-gray-800" to="/coaches">
-          Kembali ke daftar pelatih
-        </Link>
+        <BackLink to="/coaches" label="Kembali ke daftar pelatih" />
         <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error || 'Pelatih tidak ditemukan.'}</div>
       </div>
     )
@@ -261,9 +260,7 @@ export default function CoachDetailPage() {
   return (
     <div className="mx-auto w-full max-w-9xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-6">
-        <Link className="text-sm font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200" to="/coaches">
-          Kembali ke daftar pelatih
-        </Link>
+        <BackLink to="/coaches" label="Kembali ke daftar pelatih" />
       </div>
       {error && (
         <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
@@ -371,7 +368,7 @@ export default function CoachDetailPage() {
           {/* ── Tab 1: Informasi Pribadi ────────────────────────── */}
           {tab === 'personal' && (
             <form onSubmit={savePersonal}>
-              <FormSection title="Data diri" description="Identitas dasar pelatih. NIK dan alamat tidak ditampilkan pada halaman publik.">
+              <FormSection title="Data diri">
                 <FormRows>
                   <FormRow label="Nama lengkap">
                     <input className="form-input w-full sm:max-w-sm" name="fullName" defaultValue={coach.fullName} required maxLength={200} />
@@ -405,11 +402,11 @@ export default function CoachDetailPage() {
                       max={new Date().toISOString().slice(0, 10)}
                     />
                   </FormRow>
-                  <FormRow label="Umur" value={age == null ? null : `${age} tahun`} hint="Otomatis dari tanggal lahir" />
+                  <FormRow label="Umur" value={age == null ? null : `${age} tahun`} hint="Otomatis" />
                 </FormRows>
               </FormSection>
 
-              <FormSection title="Kontak" description="Kanal komunikasi dan kesediaan menerima atlet baru.">
+              <FormSection title="Kontak">
                 <FormRows>
                   <FormRow label="Alamat lengkap">
                     <textarea className="form-textarea w-full sm:max-w-md" name="address" rows={2} defaultValue={coach.address} required maxLength={1000} />
@@ -432,7 +429,7 @@ export default function CoachDetailPage() {
                 </FormRows>
               </FormSection>
 
-              <FormSection title="Pengalaman / prestasi" description="Rekam jejak kepelatihan yang perlu dicatat.">
+              <FormSection title="Pengalaman / prestasi">
                 <FormRows>
                   <FormRow label="Pengalaman / prestasi">
                     <textarea className="form-textarea w-full sm:max-w-2xl" name="experience" rows={4} defaultValue={coach.experience ?? ''} maxLength={4000} />
@@ -446,7 +443,7 @@ export default function CoachDetailPage() {
           {/* ── Tab 2: Informasi Kepelatihan ────────────────────── */}
           {tab === 'coaching' && (
             <form onSubmit={saveCoaching}>
-              <FormSection title="Informasi kepelatihan" description="Aktivitas dan spesialisasi pelatih.">
+              <FormSection title="Informasi kepelatihan">
                 <FormRows>
                   <FormRow label="Status pelatih">
                     <select className="form-select w-full sm:max-w-[200px]" name="coachStatus" defaultValue={coach.coachStatus}>
@@ -465,7 +462,7 @@ export default function CoachDetailPage() {
                       defaultValue={coach.coachingSince ?? ''}
                     />
                   </FormRow>
-                  <FormRow label="Pengalaman" value={formatExperience(coach.coachingSince)} hint="Otomatis dari tahun mulai melatih" />
+                  <FormRow label="Pengalaman" value={formatExperience(coach.coachingSince)} hint="Otomatis" />
                   <FormRow label="Tempat / club melatih">
                     <input className="form-input w-full sm:max-w-sm" name="clubName" defaultValue={coach.clubName ?? ''} maxLength={200} />
                   </FormRow>
